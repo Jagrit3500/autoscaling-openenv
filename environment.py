@@ -8,7 +8,7 @@ OpenEnv interface:
 
 Simulation model:
     - A cluster of servers handles incoming HTTP requests
-    - Each server handles CAPACITY_PER_INSTANCE rps at healthy load
+    - Each server handles task.instance_capacity_rps at healthy load
     - CPU = (rps / total_capacity) * 100  +  queue_pressure
       CPU is NOT capped at 100 — it reflects true overload signal
     - Queue grows when rps > capacity, drains gradually via drain_factor
@@ -35,7 +35,10 @@ from tasks import Task, get_task, empty_episode_info
 # Constants
 # ─────────────────────────────────────────────
 
-CAPACITY_PER_INSTANCE: float = 120.0
+# Per-server capacity is now defined per task via instance_capacity_rps
+# to model different cloud instance types (t3.micro / t3.medium / c5.large).
+# This fallback constant is no longer used in simulation logic.
+CAPACITY_PER_INSTANCE: float = 120.0   # kept for backward compatibility only
 CPU_HARD_CAP: float = 200.0
 QUEUE_DRAIN_FACTOR: float = 0.35
 MEMORY_BASE: float = 35.0
@@ -288,7 +291,7 @@ class AutoScalingEnvironment:
         Memory model:
             memory = base + (cpu * ratio), clamped 0–100
         """
-        total_capacity = max(1.0, self.current_instances * CAPACITY_PER_INSTANCE)
+        total_capacity = max(1.0, self.current_instances * self.task.instance_capacity_rps)
 
         # CPU
         raw_cpu = (self.requests_per_second / total_capacity) * 100.0

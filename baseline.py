@@ -19,44 +19,56 @@ class RuleBasedAgent:
         rps         = obs["requests_per_second"]
         budget_left = obs["budget_remaining"]
         time_step   = obs["time_step"]
+        max_steps   = obs["max_steps"]
         total       = instances + pending
- 
+
+        # ── Budget guard ──────────────────────────────────────────────
+        # If budget is running low, stop scaling up entirely.
+        # Remaining budget must cover at least current instances
+        # for the remaining steps — otherwise we go bankrupt.
+        steps_left = max_steps - time_step
+        min_cost_to_finish = instances * 0.5 * steps_left
+        budget_tight = budget_left < min_cost_to_finish * 1.2
+
         # ── Rule 1: Safety — single instance with rising CPU ──────────
-        # If only one active server and CPU is climbing, scale up
-        # immediately even before hitting the normal threshold.
-        # Critical for Task 3 which starts with minimal capacity.
         if instances == 1 and pending == 0 and cpu > sla_cpu * 0.45:
-            if total < max_inst:
+            if total < max_inst and not budget_tight:
                 return ACTION_SCALE_UP
- 
-        # ── Rule 2: Wave anticipation (Task 2 specific) ───────────────
-        # Traffic in Task 2 alternates every 10 steps.
-        # Pre-scale 2 steps before the spike so the server is
-        # ready exactly when high traffic arrives (boot_delay = 2).
-        # Guards: budget must be healthy, not already over-provisioned.
-        in_low_phase  = rps < 150           # currently in low traffic
-        wave_boundary = (time_step % 10) >= 8  # 2 steps before next wave
-        budget_ok     = budget_left > 5.0   # enough budget to justify
-        needs_more    = cpu > 30.0          # not already over-provisioned
- 
+
+        # ── Rule 2: Wave anticipation ─────────────────────────────────
+        in_low_phase  = rps < 150
+        wave_boundary = (time_step % 10) >= 8
+        budget_ok     = budget_left > 8.0      # tighter than before
+        needs_more    = cpu > 30.0
         if in_low_phase and wave_boundary and budget_ok and needs_more:
             if total < max_inst:
                 return ACTION_SCALE_UP
- 
+
         # ── Rule 3: Standard proactive scale up ───────────────────────
-        # Trigger at 60% SLA (not 75%) to account for 2-step boot delay.
-        # Queue trigger at 30% catches buildup before it becomes critical.
-        if (cpu > sla_cpu * 0.60 or queue > sla_q * 0.30):
-            if total < max_inst:
-                return ACTION_SCALE_UP
- 
-        # ── Rule 4: Conservative scale down ──────────────────────────
-        # Only scale down when CPU is genuinely low AND we are not near
-        # a wave boundary (avoids removing a server right before spike).
+        # Skip if budget is tight
+        if not budget_tight:
+            if cpu > sla_cpu * 0.60 or queue > sla_q * 0.30:
+                if total < max_inst:
+                    return ACTION_SCALE_UP
+
+        # ── Rule 4: Aggressive scale down ────────────────────────────
+        # Scale down more readily to save budget:
+        # - not near a wave boundary
+        # - CPU comfortably low
+        # - queue nearly empty
+        # - budget is tight OR system is very comfortable
         near_wave = (time_step % 10) >= 7
-        if cpu < 35.0 and queue < sla_q * 0.15 and instances > 1 and not near_wave:
+        comfortable = cpu < 35.0 and queue < sla_q * 0.15
+        if comfortable and instances > 1 and not near_wave:
             return ACTION_SCALE_DOWN
- 
+
+        # ── Rule 5: Force scale down if budget critical ───────────────
+        # Even if near wave boundary, scale down if we're about to
+        # run out of budget with more than 10 steps left.
+        if budget_tight and instances > 1 and steps_left > 10:
+            if cpu < sla_cpu * 0.70 and queue < sla_q * 0.40:
+                return ACTION_SCALE_DOWN
+
         return ACTION_HOLD
 
 
@@ -74,17 +86,14 @@ def main():
         while not done:
             action = agent.act(obs)
             obs, _, done, info = env.step(action)
-
             if done:
                 final_info = info
 
         result = grade_episode(task_id, final_info, env.task)
         print_grade(result)
-
         scores[task_id] = result["final_score"]
 
     final_score = aggregate_scores(scores)
-
     print("=" * 50)
     print(f"BASELINE FINAL SCORE: {final_score:.4f}")
     print("=" * 50)

@@ -1,0 +1,144 @@
+name: auto-scaling-infrastructure-agent
+version: "1.0.0"
+
+description: >
+  An OpenEnv-compatible environment where an AI agent manages
+  server infrastructure scaling decisions (scale up / scale down / hold)
+  based on real-time CPU usage, request queue length, traffic load,
+  and cost constraints.
+
+authors:
+  - name: Auto-Scaling Team
+    track: Meta x Scaler OpenEnv AI Hackathon
+
+# ─────────────────────────────────────────────
+# Environment
+# ─────────────────────────────────────────────
+
+environment:
+  class: AutoScalingEnvironment
+  module: environment
+  entrypoint: environment.py
+
+# ─────────────────────────────────────────────
+# Action Space
+# ─────────────────────────────────────────────
+
+action_space:
+  type: discrete
+  n: 3
+  actions:
+    0: scale_up
+    1: scale_down
+    2: hold
+
+# ─────────────────────────────────────────────
+# Observation Space
+# ─────────────────────────────────────────────
+
+observation_space:
+  type: dict
+  fields:
+
+    # Identity
+    task_id: { type: int, description: "Active task (1/2/3)" }
+    task_name: { type: str, description: "Human-readable task name" }
+    difficulty: { type: str, description: "easy | medium | hard" }
+
+    # Core metrics
+    cpu_usage: { type: float, description: "CPU percent, can exceed 100 under overload" }
+    memory_usage: { type: float, description: "Estimated memory percent (0-100)" }
+    queue_length: { type: float, description: "Pending requests in queue" }
+    requests_per_second: { type: float, description: "Current traffic load (rps)" }
+
+    # Infrastructure
+    current_instances: { type: int, description: "Active servers" }
+    pending_instances: { type: int, description: "Servers still booting" }
+    max_instances: { type: int, description: "Maximum allowed servers" }
+
+    # Cost
+    cost_so_far: { type: float, description: "Cumulative cost" }
+    budget: { type: float, description: "Total budget" }
+    budget_remaining: { type: float, description: "budget - cost_so_far" }
+
+    # Progress
+    current_step: { type: int, description: "Current step index" }
+    max_steps: { type: int, description: "Episode length" }
+    steps_remaining: { type: int, description: "Steps left" }
+
+    # Constraints
+    sla_cpu_limit: { type: float, description: "CPU limit before SLA penalty" }
+    sla_queue_limit: { type: int, description: "Queue limit before SLA penalty" }
+    critical_cpu_threshold: { type: float, description: "Critical CPU threshold" }
+    critical_queue_threshold: { type: int, description: "Critical queue threshold" }
+
+    # Danger
+    consecutive_critical_steps: { type: int, description: "Critical steps in a row" }
+
+    # Last action
+    last_action: { type: str, description: "scale_up | scale_down | hold" }
+
+# ─────────────────────────────────────────────
+# Reward
+# ─────────────────────────────────────────────
+
+reward:
+  type: shaped
+  description: >
+    Reward balances system stability, SLA adherence, and cost efficiency.
+
+# ─────────────────────────────────────────────
+# Tasks
+# ─────────────────────────────────────────────
+
+tasks:
+  - id: 1
+    name: Single Spike Recovery
+    difficulty: easy
+    max_steps: 30
+    initial_instances: 2
+    max_instances: 10
+    budget: 100.0
+
+  - id: 2
+    name: Traffic Wave Management
+    difficulty: medium
+    max_steps: 50
+    initial_instances: 2
+    max_instances: 6
+    budget: 60.0
+
+  - id: 3
+    name: Adaptive Scaling
+    difficulty: hard
+    max_steps: 60
+    initial_instances: 1
+    max_instances: 5
+    budget: 40.0
+
+# ─────────────────────────────────────────────
+# Scoring
+# ─────────────────────────────────────────────
+
+scoring:
+  module: graders
+  function: grade_episode
+  aggregate_function: aggregate_scores
+
+# ─────────────────────────────────────────────
+# Runtime
+# ─────────────────────────────────────────────
+
+runtime:
+  language: python
+  version: "3.10"
+  dependencies:
+    - anthropic
+
+# ─────────────────────────────────────────────
+# Entry Points
+# ─────────────────────────────────────────────
+
+entry_points:
+  baseline: "python baseline.py"
+  inference: "python inference.py"

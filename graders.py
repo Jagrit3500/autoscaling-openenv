@@ -1,66 +1,43 @@
-"""
-graders.py - Multi-dimensional scoring for Auto-Scaling Infrastructure Agent
-
-Scoring philosophy:
-    - 6 dimensions: completion, uptime, sla, cost, stability, scaling efficiency
-    - Per-task weight profiles - each task rewards different skills
-    - Flat crash penalty (-0.3) as explicit additive deduction
-    - aggregate_scores() rolls up all 3 tasks into one leaderboard number
-    - All sub-scores clamped [0.0, 1.0] before weighting
-    - Final score clamped [0.0, 1.0]
-
-Usage:
-    from graders import grade_episode, aggregate_scores
-
-    obs, reward, done, info = env.step(action)
-    if done:
-        result = grade_episode(task_id=1, info=info, task=env.task)
-        print(result["final_score"])   # 0.0 - 1.0
-        print(result["breakdown"])     # per-dimension scores
-"""
-
 from __future__ import annotations
 
 from typing import Any, Dict
 
 from tasks import Task, get_task
 
+EPS = 1e-6
 
-# 
-# Weight Profiles (per task)
-# 
+
+def strict_unit_interval(x: float) -> float:
+    return max(EPS, min(1.0 - EPS, float(x)))
+
 
 WEIGHT_PROFILES: Dict[int, Dict[str, float]] = {
     1: {
-        "completion":          0.25,
-        "uptime":              0.25,
-        "sla":                 0.20,
-        "cost":                0.10,
-        "stability":           0.12,
-        "scaling_efficiency":  0.08,
+        "completion": 0.25,
+        "uptime": 0.25,
+        "sla": 0.20,
+        "cost": 0.10,
+        "stability": 0.12,
+        "scaling_efficiency": 0.08,
     },
     2: {
-        "completion":          0.20,
-        "uptime":              0.20,
-        "sla":                 0.15,
-        "cost":                0.20,
-        "stability":           0.12,
-        "scaling_efficiency":  0.13,
+        "completion": 0.20,
+        "uptime": 0.20,
+        "sla": 0.15,
+        "cost": 0.20,
+        "stability": 0.12,
+        "scaling_efficiency": 0.13,
     },
     3: {
-        "completion":          0.30,
-        "uptime":              0.15,
-        "sla":                 0.10,
-        "cost":                0.20,
-        "stability":           0.15,
-        "scaling_efficiency":  0.10,
+        "completion": 0.30,
+        "uptime": 0.15,
+        "sla": 0.10,
+        "cost": 0.20,
+        "stability": 0.15,
+        "scaling_efficiency": 0.10,
     },
 }
 
-
-# 
-# Sub-Score Functions
-# 
 
 def _score_completion(info: Dict[str, Any], task: Task) -> float:
     steps_completed = max(1, info.get("steps_completed", 1))
@@ -74,12 +51,11 @@ def _score_uptime(info: Dict[str, Any], task: Task) -> float:
     uptime = max(0.0, min(100.0, info.get("uptime_percentage", 0.0)))
     if uptime >= 95.0:
         return 1.0
-    elif uptime >= 90.0:
+    if uptime >= 90.0:
         return round(0.80 + (uptime - 90.0) / 10.0 * 0.20, 4)
-    elif uptime >= 70.0:
+    if uptime >= 70.0:
         return round(0.40 + (uptime - 70.0) / 20.0 * 0.40, 4)
-    else:
-        return round(max(0.0, uptime / 70.0 * 0.40), 4)
+    return round(max(0.0, uptime / 70.0 * 0.40), 4)
 
 
 def _score_sla(info: Dict[str, Any], task: Task) -> float:
@@ -106,32 +82,26 @@ def _score_stability(info: Dict[str, Any], task: Task) -> float:
     ratio = critical / steps
     if ratio == 0.0:
         return 1.0
-    elif ratio <= 0.20:
+    if ratio <= 0.20:
         return round(1.0 - (ratio / 0.20) * 0.50, 4)
-    elif ratio <= 0.50:
+    if ratio <= 0.50:
         return round(0.50 - ((ratio - 0.20) / 0.30) * 0.40, 4)
-    else:
-        return round(max(0.0, 0.10 - (ratio - 0.50) * 0.20), 4)
+    return round(max(0.0, 0.10 - (ratio - 0.50) * 0.20), 4)
 
 
 def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
     tolerance = max(1, task.max_steps // 5)
     unnecessary = (
-        info.get("unnecessary_scaleups", 0) +
-        info.get("unnecessary_scaledowns", 0)
+        info.get("unnecessary_scaleups", 0)
+        + info.get("unnecessary_scaledowns", 0)
     )
     if unnecessary == 0:
         return 1.0
     ratio = unnecessary / tolerance
     if ratio <= 1.0:
         return round(1.0 - ratio * 0.50, 4)
-    else:
-        return round(max(0.0, 0.50 - (ratio - 1.0) * 0.50), 4)
+    return round(max(0.0, 0.50 - (ratio - 1.0) * 0.50), 4)
 
-
-# 
-# Main Grader
-# 
 
 def grade_episode(
     task_id: int,
@@ -144,13 +114,15 @@ def grade_episode(
     weights = WEIGHT_PROFILES[task_id]
 
     breakdown = {
-        "completion":         _score_completion(info, task),
-        "uptime":             _score_uptime(info, task),
-        "sla":                _score_sla(info, task),
-        "cost":               _score_cost(info, task),
-        "stability":          _score_stability(info, task),
+        "completion": _score_completion(info, task),
+        "uptime": _score_uptime(info, task),
+        "sla": _score_sla(info, task),
+        "cost": _score_cost(info, task),
+        "stability": _score_stability(info, task),
         "scaling_efficiency": _score_scaling_efficiency(info, task),
     }
+
+    breakdown = {k: strict_unit_interval(v) for k, v in breakdown.items()}
 
     weighted = {
         dim: round(score * weights[dim], 6)
@@ -159,56 +131,48 @@ def grade_episode(
 
     crash_penalty = 0.3 if info.get("termination_reason") != "success" else 0.0
     raw_total = sum(weighted.values()) - crash_penalty
-    final_score = round(min(1.0, max(0.0, raw_total)), 4)
+    final_score = round(strict_unit_interval(raw_total), 6)
 
     return {
-        "task_id":       task_id,
-        "final_score":   final_score,
-        "breakdown":     breakdown,
-        "weighted":      weighted,
-        "weights":       weights,
+        "task_id": task_id,
+        "final_score": final_score,
+        "breakdown": breakdown,
+        "weighted": weighted,
+        "weights": weights,
         "crash_penalty": crash_penalty,
-        "termination":   info.get("termination_reason", "unknown"),
-        "steps":         info.get("steps_completed", 0),
-        "budget_used":   f"{info.get('total_cost', 0.0):.2f} / {task.budget:.2f}",
-        "uptime_pct":    info.get("uptime_percentage", 0.0),
+        "termination": info.get("termination_reason", "unknown"),
+        "steps": info.get("steps_completed", 0),
+        "budget_used": f"{info.get('total_cost', 0.0):.2f} / {task.budget:.2f}",
+        "uptime_pct": info.get("uptime_percentage", 0.0),
     }
 
-
-# 
-# Leaderboard Roll-up
-# 
 
 def aggregate_scores(scores: Dict[int, float]) -> float:
     task_weights = {1: 0.20, 2: 0.35, 3: 0.45}
     total = sum(scores.get(tid, 0.0) * w for tid, w in task_weights.items())
-    return round(total, 4)
+    return round(total, 6)
 
-
-# 
-# Pretty Printer
-# 
 
 def print_grade(result: Dict[str, Any]) -> None:
-    stars = "" if result["final_score"] >= 0.8 else "" if result["final_score"] >= 0.5 else ""
-    print(f"\n{'' * 56}")
-    print(f"  Task {result['task_id']} Score Report")
-    print(f"{'' * 56}")
-    print(f"  Final Score   : {result['final_score']:.4f}  ({stars})")
+    print("\n")
+    print("  Task {} Score Report".format(result["task_id"]))
+    print("")
+    print(f"  Final Score   : {result['final_score']:.6f}")
     print(f"  Termination   : {result['termination']}")
     print(f"  Steps         : {result['steps']}")
     print(f"  Budget Used   : {result['budget_used']}")
     print(f"  Uptime        : {result['uptime_pct']}%")
     if result["crash_penalty"] > 0:
-        print(f"  Crash Penalty : -0.3 (non-success)")
-    print(f"\n  {'Dimension':<22} {'Raw':>6}  {'Weight':>7}  {'Weighted':>9}")
-    print(f"  {'' * 50}")
+        print("  Crash Penalty : -0.3 (non-success)")
+
+    print(f"\n  {'Dimension':<22} {'Raw':>8}  {'Weight':>7}  {'Weighted':>10}")
     for dim, raw in result["breakdown"].items():
         w = result["weights"][dim]
         wv = result["weighted"][dim]
-        print(f"  {dim:<22} {raw:>6.4f}  {w:>7.2f}  {wv:>9.6f}")
-    print(f"  {'' * 50}")
+        print(f"  {dim:<22} {raw:>8.6f}  {w:>7.2f}  {wv:>10.6f}")
+
     if result["crash_penalty"] > 0:
-        print(f"  {'crash_penalty':<22} {'':>6}  {'':>7}  {-result['crash_penalty']:>9.4f}")
-    print(f"  {'TOTAL':<22} {'':>6}  {'':>7}  {result['final_score']:>9.4f}")
-    print(f"{'' * 56}\n")
+        print(f"  {'crash_penalty':<22} {'':>8}  {'':>7}  {-result['crash_penalty']:>10.6f}")
+
+    print(f"  {'TOTAL':<22} {'':>8}  {'':>7}  {result['final_score']:>10.6f}")
+    print("\n")

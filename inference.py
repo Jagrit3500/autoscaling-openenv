@@ -38,8 +38,9 @@ from graders import grade_episode, aggregate_scores
 # 
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.getenv("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN     = os.getenv("HF_TOKEN",     "")
+MODEL_NAME   = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+API_KEY      = os.getenv("API_KEY")
+HF_TOKEN     = os.getenv("HF_TOKEN")  # optional fallback for local testing only
 
 BENCHMARK    = "autoscaling-openenv"
 
@@ -179,8 +180,8 @@ No explanation. No markdown. No extra text. Just the JSON."""
 class LLMAgent:
     def __init__(self) -> None:
         self.client = OpenAI(
-            base_url=API_BASE_URL,
-            api_key=HF_TOKEN or "no-key",
+            base_url=os.environ["API_BASE_URL"],
+            api_key=os.environ["API_KEY"],
         )
         self.fallback = RuleBasedAgent()
 
@@ -210,8 +211,8 @@ class LLMAgent:
             if action not in (ACTION_SCALE_UP, ACTION_SCALE_DOWN, ACTION_HOLD):
                 return ACTION_HOLD
             return action
-        except Exception:
-            return self.fallback.act(obs)
+        except Exception as e:
+            raise RuntimeError(f"LLM failed: {e}")
 
 
 # 
@@ -287,16 +288,20 @@ def main() -> None:
     parser.add_argument(
         "--agent",
         choices=["rule", "llm"],
-        default="rule",
-        help="Agent to use: rule (default, no API key) or llm.",
+        default="llm",
+        help="Agent to use: llm (default, requires API_BASE_URL and API_KEY) or rule.",
     )
     args = parser.parse_args()
 
-    if args.agent == "llm" and HF_TOKEN:
-        agent      = LLMAgent()
+    if args.agent == "llm":
+        if "API_BASE_URL" not in os.environ or "API_KEY" not in os.environ:
+            raise RuntimeError(
+                "LLM mode requires API_BASE_URL and API_KEY environment variables."
+            )
+        agent = LLMAgent()
         agent_name = MODEL_NAME
     else:
-        agent      = RuleBasedAgent()
+        agent = RuleBasedAgent()
         agent_name = "rule-based"
 
     task_ids: List[int]        = [args.task] if args.task else [1, 2, 3]

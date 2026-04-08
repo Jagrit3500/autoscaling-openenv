@@ -44,9 +44,13 @@ COPY environment.py .
 COPY graders.py .
 COPY inference.py .
 COPY baseline.py .
-COPY server.py .
+RUN mkdir -p server
+COPY server/__init__.py server/__init__.py
+COPY server/app.py server/app.py
 COPY openenv.yaml .
 COPY README.md .
+COPY pyproject.toml .
+COPY uv.lock .
 
 # Smoke test at build time — validates all three core files
 RUN python tasks.py && \
@@ -58,4 +62,4 @@ EXPOSE 7860
 
 # Default: run FastAPI server so /reset responds with 200
 # (required by automated validator)
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]

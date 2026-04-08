@@ -158,6 +158,6 @@ runtime:
 # 
 
 entry_points:
-  server: "uvicorn server:app --host 0.0.0.0 --port 7860"
+  server: "uvicorn server.app:app --host 0.0.0.0 --port 7860"
   baseline: "python baseline.py"
   inference: "python inference.py"

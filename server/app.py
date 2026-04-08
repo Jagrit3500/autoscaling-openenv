@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import uvicorn
 
@@ -16,7 +15,7 @@ from environment import (
 from tasks import ALL_TASKS
 
 app = FastAPI(
-    title="Auto-Scaling Infrastructure Agent — OpenEnv",
+    title="Auto-Scaling Infrastructure Agent - OpenEnv",
     description="OpenEnv environment for AI-driven server auto-scaling",
     version="1.0.0",
 )
@@ -37,6 +36,17 @@ class StepResponse(BaseModel):
     reward: float
     done: bool
     info: Dict[str, Any]
+
+
+@app.get("/")
+def root():
+    return {
+        "status": "ok",
+        "message": "Auto-Scaling Infrastructure Agent is running",
+        "health": "/health",
+        "tasks": "/tasks",
+        "docs": "/docs",
+    }
 
 
 @app.get("/health")
@@ -89,20 +99,7 @@ def tasks():
     }
 
 
-@app.get("/", response_class=HTMLResponse)
-def index():
-    return """
-    <html>
-    <body style="font-family: monospace; padding: 2rem;">
-      <h1>Auto-Scaling Infrastructure Agent</h1>
-      <p>OpenEnv environment for AI-driven server auto-scaling.</p>
-    </body>
-    </html>
-    """
-
-
 def main():
-    import uvicorn
     uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
 
 

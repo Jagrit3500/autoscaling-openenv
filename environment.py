@@ -539,14 +539,23 @@ if __name__ == "__main__":
         step_count = 0
 
         while not done:
-            cpu = obs["cpu_usage"]
-            queue = obs["queue_length"]
+            # Improved self-test agent — mirrors the proactive thresholds
+            # used by baseline.py so the self-test output reflects the
+            # actual agent quality rather than a naive reactive policy.
+            total = obs["current_instances"] + obs["pending_instances"]
+            sla   = obs["sla_cpu_limit"]
+            sla_q = obs["sla_queue_limit"]
 
-            if cpu > 80.0 or queue > obs["sla_queue_limit"] * 0.8:
-                action = ACTION_SCALE_UP
-            elif (cpu < 40.0 and
-                  queue < obs["sla_queue_limit"] * 0.2 and
-                  obs["current_instances"] > 1):
+            if obs["cpu_usage"] > sla * 0.55 or obs["queue_length"] > sla_q * 0.25:
+                if total < obs["max_instances"]:
+                    action = ACTION_SCALE_UP
+                else:
+                    action = ACTION_HOLD
+            elif (
+                obs["cpu_usage"] < 35.0
+                and obs["queue_length"] < sla_q * 0.15
+                and obs["current_instances"] > 1
+            ):
                 action = ACTION_SCALE_DOWN
             else:
                 action = ACTION_HOLD
@@ -570,5 +579,5 @@ if __name__ == "__main__":
         print(f"  └─ Unnecessary ↓   : {info['unnecessary_scaledowns']}")
 
     print("\n" + "=" * 65)
-    print("  All tasks passed. Ready to build graders.py")
+    print("  Self-test complete.")
     print("=" * 65)

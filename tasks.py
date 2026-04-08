@@ -283,6 +283,8 @@ TASK_3 = Task(
     description=(
         "Traffic varies randomly between 50 and 480 rps over 60 steps "
         "(seeded at 42 for reproducibility). "
+        "In the default seeded episode used for evaluation, realized traffic "
+        "ranges between ~50 and ~223 rps. "
         "Maintain SLA with at most 5 instances and a tight budget. "
         "Servers handle only 100 rps each (t3.micro equivalent) — "
         "provision carefully. "

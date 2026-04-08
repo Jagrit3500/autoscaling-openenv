@@ -7,14 +7,14 @@ MANDATORY FORMAT (from hackathon spec):
     [END]   success=<true|false> steps=<n> rewards=<r1,r2,...,rn>
 
 Required environment variables:
-    API_BASE_URL   The API endpoint for the LLM
+    API_BASE_URL   The API endpoint (default: HuggingFace router)
     MODEL_NAME     The model identifier
-    HF_TOKEN       Your HuggingFace / API key
+    HF_TOKEN       Your HuggingFace / API token
 
 Run:
-    python inference.py                  # all 3 tasks, rule-based agent
-    python inference.py --task 1         # single task
-    python inference.py --agent llm      # LLM agent (requires HF_TOKEN)
+    python inference.py                   # all 3 tasks, rule-based agent
+    python inference.py --task 1          # single task
+    python inference.py --agent llm       # LLM agent (requires HF_TOKEN)
 """
 
 import argparse
@@ -45,14 +45,20 @@ BENCHMARK    = "autoscaling-openenv"
 
 
 # ─────────────────────────────────────────────
-# Mandatory stdout logging — ONLY these lines go to stdout
+# Mandatory stdout logging — ONLY these 3 formats touch stdout
 # ─────────────────────────────────────────────
 
 def log_start(task_name: str, model: str) -> None:
     print(f"[START] task={task_name} env={BENCHMARK} model={model}", flush=True)
 
 
-def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str] = None) -> None:
+def log_step(
+    step: int,
+    action: str,
+    reward: float,
+    done: bool,
+    error: Optional[str] = None,
+) -> None:
     error_val = error if error else "null"
     print(
         f"[STEP] step={step} action={action} "
@@ -64,66 +70,82 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
 def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} "
+        f"steps={steps} rewards={rewards_str}",
         flush=True,
     )
 
 
 # ─────────────────────────────────────────────
-# Rule-Based Agent (default — no API key needed)
+# Rule-Based Agent — mirrors baseline.py exactly
 # ─────────────────────────────────────────────
 
 class RuleBasedAgent:
+    """
+    Task-aware deterministic agent. Mirrors the logic in baseline.py.
+
+    Key design decisions:
+        - Task 2: double pre-scale at steps X7 and X8 so 4 instances are
+          active by wave start (3 instances at 350 rps = 97% CPU = instant crash)
+        - Task 3: never drop below 2 instances — single instance cannot
+          survive random spikes and the agent can't recover in time
+        - Task 1: proactive scale-up at 55% SLA CPU to account for boot delay
+        - Budget guard uses next-instance cost, not current-instance floor
+    """
+
     def act(self, obs: Dict[str, Any]) -> int:
         cpu         = obs["cpu_usage"]
         queue       = obs["queue_length"]
-        instances   = obs["current_instances"]
-        pending     = obs["pending_instances"]
+        inst        = obs["current_instances"]
+        pend        = obs["pending_instances"]
         sla_cpu     = obs["sla_cpu_limit"]
         sla_q       = obs["sla_queue_limit"]
         max_inst    = obs["max_instances"]
         rps         = obs["requests_per_second"]
         budget_left = obs["budget_remaining"]
-        time_step   = obs["time_step"]
+        t           = obs["time_step"]
         max_steps   = obs["max_steps"]
-        total       = instances + pending
+        total       = inst + pend
+        steps_left  = max_steps - t
+        task_id     = obs["task_id"]
+        consec      = obs["consecutive_critical_steps"]
 
-        # Budget guard — stop scaling up if we risk running out
-        steps_left = max_steps - time_step
-        min_cost_to_finish = instances * 0.5 * steps_left
-        budget_tight = budget_left < min_cost_to_finish * 1.2
+        # Budget guard: block scale-up only if we can't afford one more
+        # instance for the rest of the episode (5% safety margin)
+        next_inst_cost = (inst + 1) * 0.5 * steps_left
+        budget_tight = budget_left < next_inst_cost * 1.05
 
-        # Safety: single instance with rising CPU
-        if instances == 1 and pending == 0 and cpu > sla_cpu * 0.45:
-            if total < max_inst and not budget_tight:
+        # ── Task 2: double pre-scale before each wave ─────────────────
+        if task_id == 2:
+            in_low = rps < 150
+            t_mod  = t % 10
+
+            if in_low and t_mod == 7 and total < 4 and budget_left > 12:
                 return ACTION_SCALE_UP
-
-        # Wave anticipation: pre-scale 2 steps before next traffic wave
-        in_low_phase  = rps < 150
-        wave_boundary = (time_step % 10) >= 8
-        budget_ok     = budget_left > 8.0
-        needs_more    = cpu > 30.0
-        if in_low_phase and wave_boundary and budget_ok and needs_more:
-            if total < max_inst:
+            if in_low and t_mod == 8 and total < 4 and budget_left > 10:
                 return ACTION_SCALE_UP
-
-        # Standard proactive scale up — skip if budget tight
-        if not budget_tight:
-            if cpu > sla_cpu * 0.60 or queue > sla_q * 0.30:
-                if total < max_inst:
-                    return ACTION_SCALE_UP
-
-        # Aggressive scale down to save budget
-        near_wave = (time_step % 10) >= 7
-        comfortable = cpu < 35.0 and queue < sla_q * 0.15
-        if comfortable and instances > 1 and not near_wave:
-            return ACTION_SCALE_DOWN
-
-        # Force scale down if budget critical and steps remaining
-        if budget_tight and instances > 1 and steps_left > 10:
-            if cpu < sla_cpu * 0.70 and queue < sla_q * 0.40:
+            if rps >= 300 and cpu > 90 and total < max_inst and consec < 3:
+                return ACTION_SCALE_UP
+            if in_low and inst > 2 and cpu < 35.0 and t_mod <= 4:
                 return ACTION_SCALE_DOWN
+            return ACTION_HOLD
 
+        # ── Task 3: never go below 2 instances ───────────────────────
+        if task_id == 3:
+            min_inst = 2
+            if not budget_tight and total < max_inst:
+                if cpu > sla_cpu * 0.60 or queue > sla_q * 0.30:
+                    return ACTION_SCALE_UP
+            if inst > min_inst and cpu < 25.0 and queue < sla_q * 0.08:
+                return ACTION_SCALE_DOWN
+            return ACTION_HOLD
+
+        # ── Task 1: proactive spike response ─────────────────────────
+        if not budget_tight and total < max_inst:
+            if cpu > sla_cpu * 0.55 or queue > sla_q * 0.25:
+                return ACTION_SCALE_UP
+        if inst > 1 and cpu < 28.0 and queue < sla_q * 0.10:
+            return ACTION_SCALE_DOWN
         return ACTION_HOLD
 
 
@@ -133,22 +155,25 @@ class RuleBasedAgent:
 
 SYSTEM_PROMPT = """You are an AI agent managing cloud server auto-scaling.
 
-At each step you see the current system state and must decide one action.
-Your goal is to keep CPU usage below the SLA limit while minimizing cost.
+At each step you receive the current system state as JSON and must choose one action.
+Your goal: keep CPU below the SLA limit, avoid critical overload, and stay within budget.
 
 ACTIONS:
-  0 = scale_up   (add 1 server, boots after 2 steps)
+  0 = scale_up   (add 1 server — boots after 2 steps, plan ahead)
   1 = scale_down (remove 1 server immediately)
   2 = hold       (do nothing)
 
-RULES:
+KEY RULES:
+  - Servers take 2 steps to boot — scale up BEFORE CPU redlines, not after
   - Never exceed max_instances
-  - Scale up proactively — servers take 2 steps to boot
-  - Scale down only when CPU is genuinely low and queue is empty
-  - Watch budget_remaining — if it hits 0 the episode ends
+  - Scale down only when cpu_usage is well below sla_cpu_limit and queue is near zero
+  - Watch budget_remaining — running out ends the episode immediately
+  - If consecutive_critical_steps is rising, scale up immediately
+  - On task_id=3 (hard), never let current_instances drop to 1
 
-Respond with ONLY a JSON object: {"action": 0} or {"action": 1} or {"action": 2}
-No explanation. No markdown. Just the JSON."""
+Respond with ONLY a JSON object on a single line:
+{"action": 0}   or   {"action": 1}   or   {"action": 2}
+No explanation. No markdown. No extra text. Just the JSON."""
 
 
 class LLMAgent:
@@ -161,7 +186,7 @@ class LLMAgent:
 
     def act(self, obs: Dict[str, Any]) -> int:
         prompt = (
-            f"Current system state:\n{json.dumps(obs, indent=2)}\n\n"
+            f"System state:\n{json.dumps(obs, indent=2)}\n\n"
             f"Choose your action (0=scale_up, 1=scale_down, 2=hold)."
         )
         try:
@@ -176,7 +201,10 @@ class LLMAgent:
             )
             raw = (response.choices[0].message.content or "").strip()
             if raw.startswith("```"):
-                raw = "\n".join(l for l in raw.splitlines() if not l.startswith("```")).strip()
+                raw = "\n".join(
+                    l for l in raw.splitlines()
+                    if not l.startswith("```")
+                ).strip()
             parsed = json.loads(raw)
             action = int(parsed.get("action", ACTION_HOLD))
             if action not in (ACTION_SCALE_UP, ACTION_SCALE_DOWN, ACTION_HOLD):
@@ -187,7 +215,7 @@ class LLMAgent:
 
 
 # ─────────────────────────────────────────────
-# Task runner — emits ONLY mandatory stdout logs
+# Task runner — emits ONLY mandatory stdout lines
 # ─────────────────────────────────────────────
 
 def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
@@ -197,11 +225,11 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
 
     log_start(task_name=task.name, model=agent_name)
 
-    rewards: List[float] = []
-    step_count = 0
-    done = False
+    rewards:    List[float]    = []
+    step_count: int            = 0
+    done:       bool           = False
     final_info: Dict[str, Any] = {}
-    error: Optional[str] = None
+    error:      Optional[str]  = None
 
     while not done:
         try:
@@ -215,9 +243,9 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
             if done:
                 final_info = info
         except Exception as exc:
-            reward = 0.0
-            done   = True
-            error  = str(exc)
+            reward     = 0.0
+            done       = True
+            error      = str(exc)
             final_info = {}
 
         step_count += 1
@@ -233,7 +261,7 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
         error = None
 
     termination = final_info.get("termination_reason", "unknown")
-    success = termination == "success"
+    success     = termination == "success"
     log_end(success=success, steps=step_count, rewards=rewards)
 
     result = grade_episode(task_id=task_id, info=final_info, task=task)
@@ -242,13 +270,26 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
 
 
 # ─────────────────────────────────────────────
-# Main — no extra prints, only [START]/[STEP]/[END]
+# Main — no extra prints, only mandatory log lines go to stdout
 # ─────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--task",  type=int, choices=[1, 2, 3], default=None)
-    parser.add_argument("--agent", choices=["rule", "llm"], default="rule")
+    parser = argparse.ArgumentParser(
+        description="Run inference against the auto-scaling environment."
+    )
+    parser.add_argument(
+        "--task",
+        type=int,
+        choices=[1, 2, 3],
+        default=None,
+        help="Run a single task (default: all 3).",
+    )
+    parser.add_argument(
+        "--agent",
+        choices=["rule", "llm"],
+        default="rule",
+        help="Agent to use: rule (default, no API key) or llm.",
+    )
     args = parser.parse_args()
 
     if args.agent == "llm" and HF_TOKEN:
@@ -258,15 +299,15 @@ def main() -> None:
         agent      = RuleBasedAgent()
         agent_name = "rule-based"
 
-    task_ids = [args.task] if args.task else [1, 2, 3]
-    scores: Dict[int, float] = {}
+    task_ids: List[int]        = [args.task] if args.task else [1, 2, 3]
+    scores:   Dict[int, float] = {}
 
     for task_id in task_ids:
-        result = run_task(task_id=task_id, agent=agent, agent_name=agent_name)
+        result          = run_task(task_id=task_id, agent=agent, agent_name=agent_name)
         scores[task_id] = result["final_score"]
 
     if len(scores) == 3:
-        aggregate_scores(scores)  # compute but do not print
+        aggregate_scores(scores)   # compute for internal use; not printed (spec compliance)
 
 
 if __name__ == "__main__":

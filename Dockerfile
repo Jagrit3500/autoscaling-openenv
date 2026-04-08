@@ -1,7 +1,7 @@
-# ─────────────────────────────────────────────────────────────
-# Dockerfile — Auto-Scaling Infrastructure Agent
+# 
+# Dockerfile - Auto-Scaling Infrastructure Agent
 # Meta x Scaler OpenEnv AI Hackathon
-# ─────────────────────────────────────────────────────────────
+# 
 #
 # Build:
 #   docker build -t autoscaling-agent .
@@ -19,7 +19,7 @@
 #   docker run -e HF_TOKEN=your_key \
 #              -e MODEL_NAME=Qwen/Qwen2.5-72B-Instruct \
 #              autoscaling-agent python inference.py --agent llm
-# ─────────────────────────────────────────────────────────────
+# 
 
 FROM python:3.10-slim
 
@@ -52,7 +52,7 @@ COPY README.md .
 COPY pyproject.toml .
 COPY uv.lock .
 
-# Smoke test at build time — validates all three core files
+# Smoke test at build time - validates all three core files
 RUN python tasks.py && \
     python environment.py && \
     python graders.py

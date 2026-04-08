@@ -33,9 +33,9 @@ from environment import (
 )
 from graders import grade_episode, aggregate_scores
 
-# ─────────────────────────────────────────────
+# 
 # Mandatory env vars (per hackathon spec)
-# ─────────────────────────────────────────────
+# 
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.getenv("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
@@ -44,9 +44,9 @@ HF_TOKEN     = os.getenv("HF_TOKEN",     "")
 BENCHMARK    = "autoscaling-openenv"
 
 
-# ─────────────────────────────────────────────
-# Mandatory stdout logging — ONLY these 3 formats touch stdout
-# ─────────────────────────────────────────────
+# 
+# Mandatory stdout logging - ONLY these 3 formats touch stdout
+# 
 
 def log_start(task_name: str, model: str) -> None:
     print(f"[START] task={task_name} env={BENCHMARK} model={model}", flush=True)
@@ -76,9 +76,9 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     )
 
 
-# ─────────────────────────────────────────────
-# Rule-Based Agent — mirrors baseline.py exactly
-# ─────────────────────────────────────────────
+# 
+# Rule-Based Agent - mirrors baseline.py exactly
+# 
 
 class RuleBasedAgent:
     """
@@ -87,7 +87,7 @@ class RuleBasedAgent:
     Key design decisions:
         - Task 2: double pre-scale at steps X7 and X8 so 4 instances are
           active by wave start (3 instances at 350 rps = 97% CPU = instant crash)
-        - Task 3: never drop below 2 instances — single instance cannot
+        - Task 3: never drop below 2 instances - single instance cannot
           survive random spikes and the agent can't recover in time
         - Task 1: proactive scale-up at 55% SLA CPU to account for boot delay
         - Budget guard uses next-instance cost, not current-instance floor
@@ -115,7 +115,7 @@ class RuleBasedAgent:
         next_inst_cost = (inst + 1) * 0.5 * steps_left
         budget_tight = budget_left < next_inst_cost * 1.05
 
-        # ── Task 2: double pre-scale before each wave ─────────────────
+        #  Task 2: double pre-scale before each wave 
         if task_id == 2:
             in_low = rps < 150
             t_mod  = t % 10
@@ -130,7 +130,7 @@ class RuleBasedAgent:
                 return ACTION_SCALE_DOWN
             return ACTION_HOLD
 
-        # ── Task 3: never go below 2 instances ───────────────────────
+        #  Task 3: never go below 2 instances 
         if task_id == 3:
             min_inst = 2
             if not budget_tight and total < max_inst:
@@ -140,7 +140,7 @@ class RuleBasedAgent:
                 return ACTION_SCALE_DOWN
             return ACTION_HOLD
 
-        # ── Task 1: proactive spike response ─────────────────────────
+        #  Task 1: proactive spike response 
         if not budget_tight and total < max_inst:
             if cpu > sla_cpu * 0.55 or queue > sla_q * 0.25:
                 return ACTION_SCALE_UP
@@ -149,9 +149,9 @@ class RuleBasedAgent:
         return ACTION_HOLD
 
 
-# ─────────────────────────────────────────────
-# LLM Agent (OpenAI-compatible client — mandatory per spec)
-# ─────────────────────────────────────────────
+# 
+# LLM Agent (OpenAI-compatible client - mandatory per spec)
+# 
 
 SYSTEM_PROMPT = """You are an AI agent managing cloud server auto-scaling.
 
@@ -159,15 +159,15 @@ At each step you receive the current system state as JSON and must choose one ac
 Your goal: keep CPU below the SLA limit, avoid critical overload, and stay within budget.
 
 ACTIONS:
-  0 = scale_up   (add 1 server — boots after 2 steps, plan ahead)
+  0 = scale_up   (add 1 server - boots after 2 steps, plan ahead)
   1 = scale_down (remove 1 server immediately)
   2 = hold       (do nothing)
 
 KEY RULES:
-  - Servers take 2 steps to boot — scale up BEFORE CPU redlines, not after
+  - Servers take 2 steps to boot - scale up BEFORE CPU redlines, not after
   - Never exceed max_instances
   - Scale down only when cpu_usage is well below sla_cpu_limit and queue is near zero
-  - Watch budget_remaining — running out ends the episode immediately
+  - Watch budget_remaining - running out ends the episode immediately
   - If consecutive_critical_steps is rising, scale up immediately
   - On task_id=3 (hard), never let current_instances drop to 1
 
@@ -214,9 +214,9 @@ class LLMAgent:
             return self.fallback.act(obs)
 
 
-# ─────────────────────────────────────────────
-# Task runner — emits ONLY mandatory stdout lines
-# ─────────────────────────────────────────────
+# 
+# Task runner - emits ONLY mandatory stdout lines
+# 
 
 def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
     env  = AutoScalingEnvironment()
@@ -269,9 +269,9 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
     return result
 
 
-# ─────────────────────────────────────────────
-# Main — no extra prints, only mandatory log lines go to stdout
-# ─────────────────────────────────────────────
+# 
+# Main - no extra prints, only mandatory log lines go to stdout
+# 
 
 def main() -> None:
     parser = argparse.ArgumentParser(

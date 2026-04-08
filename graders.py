@@ -3,7 +3,7 @@ graders.py - Multi-dimensional scoring for Auto-Scaling Infrastructure Agent
 
 Scoring philosophy:
     - 6 dimensions: completion, uptime, sla, cost, stability, scaling efficiency
-    - Per-task weight profiles — each task rewards different skills
+    - Per-task weight profiles - each task rewards different skills
     - Flat crash penalty (-0.3) as explicit additive deduction
     - aggregate_scores() rolls up all 3 tasks into one leaderboard number
     - All sub-scores clamped [0.0, 1.0] before weighting
@@ -26,9 +26,9 @@ from typing import Any, Dict
 from tasks import Task, get_task
 
 
-# ─────────────────────────────────────────────
+# 
 # Weight Profiles (per task)
-# ─────────────────────────────────────────────
+# 
 
 WEIGHT_PROFILES: Dict[int, Dict[str, float]] = {
     1: {
@@ -58,9 +58,9 @@ WEIGHT_PROFILES: Dict[int, Dict[str, float]] = {
 }
 
 
-# ─────────────────────────────────────────────
+# 
 # Sub-Score Functions
-# ─────────────────────────────────────────────
+# 
 
 def _score_completion(info: Dict[str, Any], task: Task) -> float:
     steps_completed = max(1, info.get("steps_completed", 1))
@@ -129,9 +129,9 @@ def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
         return round(max(0.0, 0.50 - (ratio - 1.0) * 0.50), 4)
 
 
-# ─────────────────────────────────────────────
+# 
 # Main Grader
-# ─────────────────────────────────────────────
+# 
 
 def grade_episode(
     task_id: int,
@@ -175,9 +175,9 @@ def grade_episode(
     }
 
 
-# ─────────────────────────────────────────────
+# 
 # Leaderboard Roll-up
-# ─────────────────────────────────────────────
+# 
 
 def aggregate_scores(scores: Dict[int, float]) -> float:
     task_weights = {1: 0.20, 2: 0.35, 3: 0.45}
@@ -185,15 +185,15 @@ def aggregate_scores(scores: Dict[int, float]) -> float:
     return round(total, 4)
 
 
-# ─────────────────────────────────────────────
+# 
 # Pretty Printer
-# ─────────────────────────────────────────────
+# 
 
 def print_grade(result: Dict[str, Any]) -> None:
-    stars = "★★★" if result["final_score"] >= 0.8 else "★★" if result["final_score"] >= 0.5 else "★"
-    print(f"\n{'─' * 56}")
+    stars = "" if result["final_score"] >= 0.8 else "" if result["final_score"] >= 0.5 else ""
+    print(f"\n{'' * 56}")
     print(f"  Task {result['task_id']} Score Report")
-    print(f"{'─' * 56}")
+    print(f"{'' * 56}")
     print(f"  Final Score   : {result['final_score']:.4f}  ({stars})")
     print(f"  Termination   : {result['termination']}")
     print(f"  Steps         : {result['steps']}")
@@ -202,13 +202,13 @@ def print_grade(result: Dict[str, Any]) -> None:
     if result["crash_penalty"] > 0:
         print(f"  Crash Penalty : -0.3 (non-success)")
     print(f"\n  {'Dimension':<22} {'Raw':>6}  {'Weight':>7}  {'Weighted':>9}")
-    print(f"  {'─' * 50}")
+    print(f"  {'' * 50}")
     for dim, raw in result["breakdown"].items():
         w = result["weights"][dim]
         wv = result["weighted"][dim]
         print(f"  {dim:<22} {raw:>6.4f}  {w:>7.2f}  {wv:>9.6f}")
-    print(f"  {'─' * 50}")
+    print(f"  {'' * 50}")
     if result["crash_penalty"] > 0:
         print(f"  {'crash_penalty':<22} {'':>6}  {'':>7}  {-result['crash_penalty']:>9.4f}")
     print(f"  {'TOTAL':<22} {'':>6}  {'':>7}  {result['final_score']:>9.4f}")
-    print(f"{'─' * 56}\n")
+    print(f"{'' * 56}\n")

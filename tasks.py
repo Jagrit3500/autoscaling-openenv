@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from typing import List
 
 
-# ─────────────────────────────────────────────
+# 
 # Task Definition
-# ─────────────────────────────────────────────
+# 
 
 @dataclass
 class Task:
@@ -32,10 +32,10 @@ class Task:
     max_steps: int                       # episode length
 
     # Per-task instance capacity (models real cloud instance types)
-    # Task 1 → 150 rps  (large powerful servers  e.g. c5.large)
-    # Task 2 → 120 rps  (standard servers        e.g. t3.medium)
-    # Task 3 → 100 rps  (small weak servers      e.g. t3.micro)
-    # This is intentional — harder tasks use weaker hardware,
+    # Task 1 -> 150 rps  (large powerful servers  e.g. c5.large)
+    # Task 2 -> 120 rps  (standard servers        e.g. t3.medium)
+    # Task 3 -> 100 rps  (small weak servers      e.g. t3.micro)
+    # This is intentional - harder tasks use weaker hardware,
     # forcing the agent to provision more instances to handle load.
     instance_capacity_rps: float         # rps one server can handle at healthy load
 
@@ -43,16 +43,16 @@ class Task:
     budget: float                        # total cost budget for episode
     cost_per_instance_per_step: float    # cost charged every step per active server
     budget_failure_multiplier: float     # fail only if cost > budget * this value
-                                         # e.g. 1.1 → 10% buffer before hard failure
+                                         # e.g. 1.1 -> 10% buffer before hard failure
 
-    # Boot delay (realism — servers don't appear instantly)
+    # Boot delay (realism - servers don't appear instantly)
     boot_delay_steps: int                # steps before a newly scaled-up server is active
 
-    # SLA limits (soft — violation = reward penalty, not instant failure)
+    # SLA limits (soft - violation = reward penalty, not instant failure)
     sla_cpu_limit: float                 # CPU% above this = SLA warning penalty
     sla_queue_limit: int                 # queue length above this = SLA warning penalty
 
-    # Critical limits (hard — sustained violation = episode failure)
+    # Critical limits (hard - sustained violation = episode failure)
     critical_cpu_threshold: float        # CPU% above this is dangerous
     critical_queue_threshold: int        # queue length above this is dangerous
     max_consecutive_critical_steps: int  # sustained critical steps before episode ends
@@ -61,9 +61,9 @@ class Task:
     traffic_pattern: List[int]           # requests/second at each time step
 
 
-# ─────────────────────────────────────────────
+# 
 # Helper: Traffic Pattern Generators
-# ─────────────────────────────────────────────
+# 
 
 def _spike_pattern(
     steps: int,
@@ -95,7 +95,7 @@ def _wave_pattern(
     wave_length: int
 ) -> List[int]:
     """
-    Alternating wave pattern: low → high → low → high ...
+    Alternating wave pattern: low -> high -> low -> high ...
     Each phase lasts wave_length steps.
 
     Used for Task 2 (Medium).
@@ -129,15 +129,15 @@ def _random_pattern(
     pattern = []
     current = (low + high) // 2          # start at midpoint, not minimum
     for _ in range(steps):
-        delta = rng.randint(-70, 70)     # symmetric → no upward drift bias
+        delta = rng.randint(-70, 70)     # symmetric -> no upward drift bias
         current = max(low, min(high, current + delta))
         pattern.append(current)
     return pattern
 
 
-# ─────────────────────────────────────────────
-# Task 1 — Easy
-# ─────────────────────────────────────────────
+# 
+# Task 1 - Easy
+# 
 #
 # Scenario:
 #   Traffic is calm at 100 rps, spikes hard to 380 rps at step 5,
@@ -149,12 +149,12 @@ def _random_pattern(
 #   No budget pressure. No tricks.
 #
 # Design rationale:
-#   instance_capacity_rps = 150  → powerful servers (c5.large equivalent)
+#   instance_capacity_rps = 150  -> powerful servers (c5.large equivalent)
 #                                   2 servers = 300 rps capacity at start
-#   max_instances = 10           → generous, not the challenge here
-#   budget = 100                 → will not be hit under normal play
-#   boot_delay = 2               → agent must act before CPU redlines
-#   max_consecutive_critical = 5 → lenient, forgives one bad reaction
+#   max_instances = 10           -> generous, not the challenge here
+#   budget = 100                 -> will not be hit under normal play
+#   boot_delay = 2               -> agent must act before CPU redlines
+#   max_consecutive_critical = 5 -> lenient, forgives one bad reaction
 
 TASK_1 = Task(
     task_id=1,
@@ -191,9 +191,9 @@ TASK_1 = Task(
 )
 
 
-# ─────────────────────────────────────────────
-# Task 2 — Medium
-# ─────────────────────────────────────────────
+# 
+# Task 2 - Medium
+# 
 #
 # Scenario:
 #   Traffic alternates between 100 rps and 350 rps every 10 steps.
@@ -205,12 +205,12 @@ TASK_1 = Task(
 #   Requires both reactive AND proactive thinking.
 #
 # Design rationale:
-#   instance_capacity_rps = 120  → standard servers (t3.medium equivalent)
+#   instance_capacity_rps = 120  -> standard servers (t3.medium equivalent)
 #                                   2 servers = 240 rps capacity at start
-#   max_instances = 6            → tight, real resource decisions required
-#   budget = 60                  → unnecessary servers drain budget fast
-#   boot_delay = 2               → agent must anticipate waves, not just react
-#   max_consecutive_critical = 4 → less lenient than Task 1
+#   max_instances = 6            -> tight, real resource decisions required
+#   budget = 60                  -> unnecessary servers drain budget fast
+#   boot_delay = 2               -> agent must anticipate waves, not just react
+#   max_consecutive_critical = 4 -> less lenient than Task 1
 
 TASK_2 = Task(
     task_id=2,
@@ -245,13 +245,13 @@ TASK_2 = Task(
 )
 
 
-# ─────────────────────────────────────────────
-# Task 3 — Hard
-# ─────────────────────────────────────────────
+# 
+# Task 3 - Hard
+# 
 #
 # Scenario:
 #   Seeded random traffic between 50 and 480 rps over 60 steps.
-#   Agent cannot memorize the pattern — must adapt dynamically.
+#   Agent cannot memorize the pattern - must adapt dynamically.
 #   Fixed seed ensures grading is always reproducible.
 #
 # What this tests:
@@ -260,17 +260,17 @@ TASK_2 = Task(
 #   Can it avoid SLA violations with only 5 instances and a tight budget?
 #
 # Design rationale:
-#   instance_capacity_rps = 100  → weak servers (t3.micro equivalent)
+#   instance_capacity_rps = 100  -> weak servers (t3.micro equivalent)
 #                                   2 servers = 200 rps capacity at start
 #                                   agent must provision carefully
-#   initial_instances = 2        → starts with minimal but survivable capacity
+#   initial_instances = 2        -> starts with minimal but survivable capacity
 #                                   (changed from 1 to avoid instant collapse)
-#   max_instances = 5            → very tight, every instance counts
-#   budget = 40                  → wasteful scaling guaranteed to fail
-#   boot_delay = 2               → anticipate or crash
-#   max_consecutive_critical = 4 → slightly more forgiving than original 3
+#   max_instances = 5            -> very tight, every instance counts
+#   budget = 40                  -> wasteful scaling guaranteed to fail
+#   boot_delay = 2               -> anticipate or crash
+#   max_consecutive_critical = 4 -> slightly more forgiving than original 3
 #                                   still hard but baseline agent can survive
-#   seed = 42                    → fixed for reproducibility
+#   seed = 42                    -> fixed for reproducibility
 #
 # Note on episode length:
 #   60 steps is intentional. Longer hard episodes cause baseline
@@ -286,7 +286,7 @@ TASK_3 = Task(
         "In the default seeded episode used for evaluation, realized traffic "
         "ranges between ~50 and ~223 rps. "
         "Maintain SLA with at most 5 instances and a tight budget. "
-        "Servers handle only 100 rps each (t3.micro equivalent) — "
+        "Servers handle only 100 rps each (t3.micro equivalent) - "
         "provision carefully. "
         "Four consecutive critical steps end the episode immediately."
     ),
@@ -312,9 +312,9 @@ TASK_3 = Task(
 )
 
 
-# ─────────────────────────────────────────────
+# 
 # Task Registry
-# ─────────────────────────────────────────────
+# 
 
 ALL_TASKS: List[Task] = [TASK_1, TASK_2, TASK_3]
 
@@ -337,25 +337,25 @@ def get_task(task_id: int) -> Task:
 def list_tasks() -> None:
     """Print a formatted summary of all available tasks."""
     print("\n" + "=" * 60)
-    print("  Auto-Scaling Environment — Available Tasks")
+    print("  Auto-Scaling Environment - Available Tasks")
     print("=" * 60)
     for task in ALL_TASKS:
         print(f"\n  Task {task.task_id}  [{task.difficulty.upper()}]  {task.name}")
         print(f"  {task.description}")
-        print(f"  ┌─ Steps              : {task.max_steps}")
-        print(f"  ├─ Max instances      : {task.max_instances}")
-        print(f"  ├─ Start instances    : {task.initial_instances}")
-        print(f"  ├─ Instance capacity  : {task.instance_capacity_rps} rps each")
-        print(f"  ├─ Budget             : {task.budget}")
-        print(f"  ├─ SLA CPU limit      : {task.sla_cpu_limit}%")
-        print(f"  ├─ Crit CPU           : {task.critical_cpu_threshold}%")
-        print(f"  └─ Max crit steps     : {task.max_consecutive_critical_steps} consecutive")
+        print(f"   Steps              : {task.max_steps}")
+        print(f"   Max instances      : {task.max_instances}")
+        print(f"   Start instances    : {task.initial_instances}")
+        print(f"   Instance capacity  : {task.instance_capacity_rps} rps each")
+        print(f"   Budget             : {task.budget}")
+        print(f"   SLA CPU limit      : {task.sla_cpu_limit}%")
+        print(f"   Crit CPU           : {task.critical_cpu_threshold}%")
+        print(f"   Max crit steps     : {task.max_consecutive_critical_steps} consecutive")
     print()
 
 
-# ─────────────────────────────────────────────
+# 
 # Metadata Template
-# ─────────────────────────────────────────────
+# 
 
 def empty_episode_info() -> dict:
     """
@@ -378,9 +378,9 @@ def empty_episode_info() -> dict:
     }
 
 
-# ─────────────────────────────────────────────
+# 
 # Self-test  (run: python tasks.py)
-# ─────────────────────────────────────────────
+# 
 
 if __name__ == "__main__":
     list_tasks()
@@ -413,7 +413,7 @@ if __name__ == "__main__":
         print(f"  Task {task.task_id} [{task.difficulty.upper()}] "
               f"{'OK' if task_ok else 'FAIL'}")
         for check_name, passed in checks.items():
-            print(f"    {'✓' if passed else '✗'}  {check_name}")
+            print(f"    {'OK' if passed else 'X'}  {check_name}")
         print(f"    instance capacity : {task.instance_capacity_rps} rps/server")
         print(f"    start capacity    : "
               f"{task.initial_instances * task.instance_capacity_rps} rps total")

@@ -2,15 +2,15 @@
 environment.py - Core simulation engine for Auto-Scaling Infrastructure Agent
 
 OpenEnv interface:
-    reset(task_id)  → start a fresh episode
-    step(action)    → agent acts, world updates, reward returned
-    state()         → current observation snapshot
+    reset(task_id)  -> start a fresh episode
+    step(action)    -> agent acts, world updates, reward returned
+    state()         -> current observation snapshot
 
 Simulation model:
     - A cluster of servers handles incoming HTTP requests
     - Each server handles task.instance_capacity_rps at healthy load
     - CPU = (rps / total_capacity) * 100  +  queue_pressure
-      CPU is NOT capped at 100 — it reflects true overload signal
+      CPU is NOT capped at 100 - it reflects true overload signal
     - Queue grows when rps > capacity, drains gradually via drain_factor
     - Scale up adds a server after boot_delay_steps (realism)
     - Scale down removes a server immediately
@@ -18,9 +18,9 @@ Simulation model:
     - Memory tracks CPU smoothly (added to state for richer observation)
 
 Actions:
-    0 → scale_up    add 1 server (boots after delay)
-    1 → scale_down  remove 1 server immediately
-    2 → hold        do nothing
+    0 -> scale_up    add 1 server (boots after delay)
+    1 -> scale_down  remove 1 server immediately
+    2 -> hold        do nothing
 """
 
 from __future__ import annotations
@@ -31,9 +31,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from tasks import Task, get_task, empty_episode_info
 
 
-# ─────────────────────────────────────────────
+# 
 # Constants
-# ─────────────────────────────────────────────
+# 
 
 # Per-server capacity is now defined per task via instance_capacity_rps
 # to model different cloud instance types (t3.micro / t3.medium / c5.large).
@@ -57,9 +57,9 @@ ACTION_NAMES: Dict[int, str] = {
 VALID_ACTIONS: List[int] = list(ACTION_NAMES.keys())
 
 
-# ─────────────────────────────────────────────
+# 
 # Environment
-# ─────────────────────────────────────────────
+# 
 
 class AutoScalingEnvironment:
     """
@@ -101,9 +101,9 @@ class AutoScalingEnvironment:
 
         self._info: dict = empty_episode_info()
 
-    # ──────────────────────────────────────────
+    # 
     # reset()
-    # ──────────────────────────────────────────
+    # 
 
     def reset(self, task_id: int = 1) -> Dict[str, Any]:
         """
@@ -142,9 +142,9 @@ class AutoScalingEnvironment:
 
         return self.state()
 
-    # ──────────────────────────────────────────
+    # 
     # step()
-    # ──────────────────────────────────────────
+    # 
 
     def step(self, action: int) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
         """
@@ -165,7 +165,7 @@ class AutoScalingEnvironment:
         if action not in ACTION_NAMES:
             raise ValueError(
                 f"Invalid action {action}. "
-                f"Valid: {VALID_ACTIONS} → {ACTION_NAMES}"
+                f"Valid: {VALID_ACTIONS} -> {ACTION_NAMES}"
             )
 
         self.last_action = action
@@ -190,7 +190,7 @@ class AutoScalingEnvironment:
         # 4. Recompute CPU, queue, memory
         self._recompute_metrics()
 
-        # 5. Charge cost — active + booting servers (cloud bills from provisioning)
+        # 5. Charge cost - active + booting servers (cloud bills from provisioning)
         billable = self.current_instances + len(self.pending_scale_ups)
         self.cost_so_far += billable * self.task.cost_per_instance_per_step
 
@@ -212,9 +212,9 @@ class AutoScalingEnvironment:
 
         return self.state(), round(reward, 4), self.done, self._build_info()
 
-    # ──────────────────────────────────────────
+    # 
     # state()
-    # ──────────────────────────────────────────
+    # 
 
     def state(self) -> Dict[str, Any]:
         """
@@ -269,9 +269,9 @@ class AutoScalingEnvironment:
             "last_action": self.last_action_name,
         }
 
-    # ──────────────────────────────────────────
+    # 
     # Internal: metrics
-    # ──────────────────────────────────────────
+    # 
 
     def _recompute_metrics(self) -> None:
         """
@@ -279,7 +279,7 @@ class AutoScalingEnvironment:
 
         CPU model:
             cpu = (rps / capacity) * 100 + queue_pressure
-            NOT capped at 100 — true overload magnitude is visible to agent.
+            NOT capped at 100 - true overload magnitude is visible to agent.
             queue_pressure adds up to 20% when queue is backed up.
             Hard cap at CPU_HARD_CAP=200 prevents float explosion only.
 
@@ -289,7 +289,7 @@ class AutoScalingEnvironment:
             queue    = max(0, queue + overflow - drain)
 
         Memory model:
-            memory = base + (cpu * ratio), clamped 0–100
+            memory = base + (cpu * ratio), clamped 0-100
         """
         total_capacity = max(1.0, self.current_instances * self.task.instance_capacity_rps)
 
@@ -308,9 +308,9 @@ class AutoScalingEnvironment:
         raw_memory = MEMORY_BASE + (self.cpu_usage * MEMORY_PER_CPU_RATIO)
         self.memory_usage = max(0.0, min(raw_memory, 100.0))
 
-    # ──────────────────────────────────────────
+    # 
     # Internal: action
-    # ──────────────────────────────────────────
+    # 
 
     def _apply_action(self, action: int) -> float:
         """Apply action to infrastructure. Returns immediate reward component."""
@@ -359,9 +359,9 @@ class AutoScalingEnvironment:
             s for s in self.pending_scale_ups if s > self.current_step
         ]
 
-    # ──────────────────────────────────────────
+    # 
     # Internal: reward
-    # ──────────────────────────────────────────
+    # 
 
     def _compute_step_reward(
         self,
@@ -426,9 +426,9 @@ class AutoScalingEnvironment:
 
         return reward
 
-    # ──────────────────────────────────────────
+    # 
     # Internal: violations and termination
-    # ──────────────────────────────────────────
+    # 
 
     def _update_violations(self) -> None:
         """Track SLA and critical violations for grading and termination."""
@@ -449,8 +449,8 @@ class AutoScalingEnvironment:
     def _check_termination(self) -> None:
         """
         Check failure conditions (priority order):
-            1. Budget exceeded beyond 10% buffer  → budget_exceeded
-            2. Sustained critical state           → critical_overload
+            1. Budget exceeded beyond 10% buffer  -> budget_exceeded
+            2. Sustained critical state           -> critical_overload
         Success handled in step() after advancing current_step.
         """
         if self.cost_so_far > self.task.budget * self.task.budget_failure_multiplier:
@@ -462,9 +462,9 @@ class AutoScalingEnvironment:
             self.done = True
             self.termination_reason = "critical_overload"
 
-    # ──────────────────────────────────────────
+    # 
     # Internal: info
-    # ──────────────────────────────────────────
+    # 
 
     def _build_info(self) -> Dict[str, Any]:
         """
@@ -488,9 +488,9 @@ class AutoScalingEnvironment:
             "termination_reason": self.termination_reason,
         }
 
-    # ──────────────────────────────────────────
+    # 
     # Utility
-    # ──────────────────────────────────────────
+    # 
 
     def get_task_metadata(self) -> Dict[str, Any]:
         """Return full task config as a plain dict."""
@@ -504,7 +504,7 @@ class AutoScalingEnvironment:
         s = self.state()
         bar_len = 20
         filled = int(min(s["cpu_usage"], 100.0) / 100.0 * bar_len)
-        bar = "█" * filled + "░" * (bar_len - filled)
+        bar = "" * filled + "" * (bar_len - filled)
         print(
             f"Step {s['time_step']:>3}/{self.task.max_steps} | "
             f"CPU [{bar}] {s['cpu_usage']:>6.1f}% | "
@@ -516,13 +516,13 @@ class AutoScalingEnvironment:
         )
 
 
-# ─────────────────────────────────────────────
+# 
 # Self-test  (run: python environment.py)
-# ─────────────────────────────────────────────
+# 
 
 if __name__ == "__main__":
     print("=" * 65)
-    print("  Auto-Scaling Environment — Self-Test (rule-based agent)")
+    print("  Auto-Scaling Environment - Self-Test (rule-based agent)")
     print("=" * 65)
 
     for task_id in [1, 2, 3]:
@@ -530,7 +530,7 @@ if __name__ == "__main__":
         obs = env.reset(task_id=task_id)
 
         print(f"\nTask {task_id} [{env.task.difficulty.upper()}]: {env.task.name}")
-        print(f"  Initial → CPU={obs['cpu_usage']}% | "
+        print(f"  Initial -> CPU={obs['cpu_usage']}% | "
               f"Instances={obs['current_instances']} | "
               f"RPS={obs['requests_per_second']}")
 
@@ -539,7 +539,7 @@ if __name__ == "__main__":
         step_count = 0
 
         while not done:
-            # Improved self-test agent — mirrors the proactive thresholds
+            # Improved self-test agent - mirrors the proactive thresholds
             # used by baseline.py so the self-test output reflects the
             # actual agent quality rather than a naive reactive policy.
             total = obs["current_instances"] + obs["pending_instances"]
@@ -568,15 +568,15 @@ if __name__ == "__main__":
                 env.render()
 
         print(f"\n  Result")
-        print(f"  ├─ Steps completed : {info['steps_completed']} / {env.task.max_steps}")
-        print(f"  ├─ Termination     : {info['termination_reason']}")
-        print(f"  ├─ Total reward    : {total_reward:.2f}")
-        print(f"  ├─ Total cost      : {info['total_cost']} / {env.task.budget}")
-        print(f"  ├─ Uptime          : {info['uptime_percentage']}%")
-        print(f"  ├─ SLA violations  : {info['sla_violation_count']}")
-        print(f"  ├─ Critical steps  : {info['critical_violation_count']}")
-        print(f"  ├─ Unnecessary ↑   : {info['unnecessary_scaleups']}")
-        print(f"  └─ Unnecessary ↓   : {info['unnecessary_scaledowns']}")
+        print(f"   Steps completed : {info['steps_completed']} / {env.task.max_steps}")
+        print(f"   Termination     : {info['termination_reason']}")
+        print(f"   Total reward    : {total_reward:.2f}")
+        print(f"   Total cost      : {info['total_cost']} / {env.task.budget}")
+        print(f"   Uptime          : {info['uptime_percentage']}%")
+        print(f"   SLA violations  : {info['sla_violation_count']}")
+        print(f"   Critical steps  : {info['critical_violation_count']}")
+        print(f"   Unnecessary    : {info['unnecessary_scaleups']}")
+        print(f"   Unnecessary    : {info['unnecessary_scaledowns']}")
 
     print("\n" + "=" * 65)
     print("  Self-test complete.")

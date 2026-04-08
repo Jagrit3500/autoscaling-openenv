@@ -12,18 +12,18 @@ authors:
   - name: Auto-Scaling Team
     track: Meta x Scaler OpenEnv AI Hackathon
 
-# ─────────────────────────────────────────────
+# 
 # Environment
-# ─────────────────────────────────────────────
+# 
 
 environment:
   class: AutoScalingEnvironment
   module: environment
   entrypoint: environment.py
 
-# ─────────────────────────────────────────────
+# 
 # Action Space
-# ─────────────────────────────────────────────
+# 
 
 action_space:
   type: discrete
@@ -33,9 +33,9 @@ action_space:
     1: scale_down
     2: hold
 
-# ─────────────────────────────────────────────
+# 
 # Observation Space
-# ─────────────────────────────────────────────
+# 
 
 observation_space:
   type: dict
@@ -69,9 +69,9 @@ observation_space:
     consecutive_critical_steps: { type: int }
     last_action: { type: str }
 
-# ─────────────────────────────────────────────
+# 
 # Reward
-# ─────────────────────────────────────────────
+# 
 
 reward:
   type: shaped
@@ -79,9 +79,9 @@ reward:
   description: >
     Dense reward balancing SLA adherence, system stability, and cost efficiency.
 
-# ─────────────────────────────────────────────
+# 
 # Tasks
-# ─────────────────────────────────────────────
+# 
 
 tasks:
   - id: 1
@@ -132,18 +132,18 @@ tasks:
       Agent must adapt dynamically under tight budget constraints.
     baseline_score: 0.2778
 
-# ─────────────────────────────────────────────
+# 
 # Scoring
-# ─────────────────────────────────────────────
+# 
 
 scoring:
   module: graders
   function: grade_episode
   aggregate_function: aggregate_scores
 
-# ─────────────────────────────────────────────
+# 
 # Runtime
-# ─────────────────────────────────────────────
+# 
 
 runtime:
   language: python
@@ -153,9 +153,9 @@ runtime:
     - fastapi>=0.110.0
     - uvicorn>=0.29.0
 
-# ─────────────────────────────────────────────
+# 
 # Entry Points
-# ─────────────────────────────────────────────
+# 
 
 entry_points:
   server: "uvicorn server:app --host 0.0.0.0 --port 7860"

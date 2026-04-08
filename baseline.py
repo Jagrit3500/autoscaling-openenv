@@ -2,7 +2,7 @@
 baseline.py - Rule-based baseline agent for Auto-Scaling Infrastructure Agent
 
 Key improvements over naive thresholds:
-    - Task-specific logic — each task has different constraints and patterns
+    - Task-specific logic - each task has different constraints and patterns
     - Task 2: double pre-scale before each wave (both servers active by wave start)
     - Task 3: never scale below 2 instances (single instance dies to any spike)
     - Budget guard uses next-instance cost, not current-instance floor
@@ -34,7 +34,7 @@ class RuleBasedAgent:
         - Task 1: react to a single spike in time (boot delay awareness)
         - Task 2: pre-scale TWO servers before each wave so 4 are active
                   at wave start (3 instances at 350 rps = 97% CPU = instant crash)
-        - Task 3: never drop to 1 instance — single instance cannot survive
+        - Task 3: never drop to 1 instance - single instance cannot survive
                   random spikes, and budget is too tight to recover from a crash
 
     Why task-specific logic outperforms generic thresholds:
@@ -61,21 +61,21 @@ class RuleBasedAgent:
         task_id    = obs["task_id"]
         consec     = obs["consecutive_critical_steps"]
 
-        # ── Budget guard ──────────────────────────────────────────────
+        #  Budget guard 
         # Block scale-up only if we can't afford one more server
         # for the remainder of the episode (with 5% safety margin).
         next_inst_cost = (inst + 1) * 0.5 * steps_left
         budget_tight = budget_left < next_inst_cost * 1.05
 
-        # ─────────────────────────────────────────────────────────────
-        # TASK 2 — Traffic Wave Management
+        # 
+        # TASK 2 - Traffic Wave Management
         # Waves alternate between 100 rps (low) and 350 rps (high).
-        # 3 instances at 350 rps = 97.2% CPU — above critical threshold.
-        # 4 instances at 350 rps = 72.9% CPU — safely below SLA.
+        # 3 instances at 350 rps = 97.2% CPU - above critical threshold.
+        # 4 instances at 350 rps = 72.9% CPU - safely below SLA.
         # Strategy: pre-scale TWO servers at steps 7 and 8 of each cycle,
         # so both are fully active (booted) by step 10 when the wave hits.
         # Scale back to 2 during troughs to stay within budget.
-        # ─────────────────────────────────────────────────────────────
+        # 
         if task_id == 2:
             in_low = rps < 150
             t_mod  = t % 10
@@ -92,22 +92,22 @@ class RuleBasedAgent:
             if rps >= 300 and cpu > 90 and total < max_inst and consec < 3:
                 return ACTION_SCALE_UP
 
-            # Scale down during trough — not near next wave boundary
+            # Scale down during trough - not near next wave boundary
             if in_low and inst > 2 and cpu < 35.0 and t_mod <= 4:
                 return ACTION_SCALE_DOWN
 
             return ACTION_HOLD
 
-        # ─────────────────────────────────────────────────────────────
-        # TASK 3 — Adaptive Scaling Under Uncertainty
+        # 
+        # TASK 3 - Adaptive Scaling Under Uncertainty
         # Random traffic 50-480 rps. Budget=40 is very tight.
         # Critical insight: never drop to 1 instance.
         # 1 instance handles only 100 rps. Any spike to 150+ rps
         # sends CPU critical and the agent can't recover fast enough.
-        # 2 instances handles up to 200 rps safely — covers most steps.
-        # ─────────────────────────────────────────────────────────────
+        # 2 instances handles up to 200 rps safely - covers most steps.
+        # 
         if task_id == 3:
-            min_inst = 2  # absolute floor — never go below this
+            min_inst = 2  # absolute floor - never go below this
 
             # Scale up if load is rising and budget allows
             if not budget_tight and total < max_inst:
@@ -120,12 +120,12 @@ class RuleBasedAgent:
 
             return ACTION_HOLD
 
-        # ─────────────────────────────────────────────────────────────
-        # TASK 1 — Single Spike Recovery
+        # 
+        # TASK 1 - Single Spike Recovery
         # Standard proactive scaling with boot delay awareness.
         # Act at 55% of SLA CPU (not 85%) so the new server is active
         # before CPU redlines.
-        # ─────────────────────────────────────────────────────────────
+        # 
         if not budget_tight and total < max_inst:
             if cpu > sla_cpu * 0.55 or queue > sla_q * 0.25:
                 return ACTION_SCALE_UP

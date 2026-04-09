@@ -6,18 +6,14 @@ Scoring philosophy:
     - Per-task weight profiles — each task rewards different skills
     - Flat crash penalty (-0.3) as explicit additive deduction
     - aggregate_scores() rolls up all 3 tasks into one leaderboard number
-    - All sub-scores clamped [0.0, 1.0] before weighting
-    - Final score clamped STRICTLY to (0.001, 0.999) — validator requires
+    - All scores clamped STRICTLY to (0.001, 0.999) — validator requires
       scores to be strictly between 0 and 1 (exclusive)
 
-Usage:
-    from graders import grade_episode, aggregate_scores
+Primary interface (what the OpenEnv validator calls):
+    compute_score(info, task) -> float   ← returns a single float in (0.001, 0.999)
 
-    obs, reward, done, info = env.step(action)
-    if done:
-        result = grade_episode(task_id=1, info=info, task=env.task)
-        print(result["final_score"])   # strictly in (0.001, 0.999)
-        print(result["breakdown"])     # per-dimension scores
+Extended interface (for detailed breakdown):
+    grade_episode(task_id, info, task)   → dict with breakdown, weights, etc.
 """
 
 from __future__ import annotations
@@ -36,24 +32,13 @@ _SCORE_MAX: float = 0.999
 
 
 def _clamp(value: float) -> float:
-    """Clamp a score to (_SCORE_MIN, _SCORE_MAX) — strictly between 0 and 1."""
-    return max(_SCORE_MIN, min(_SCORE_MAX, value))
+    """Clamp to (_SCORE_MIN, _SCORE_MAX) — strictly between 0 and 1."""
+    return max(_SCORE_MIN, min(_SCORE_MAX, float(value)))
 
 
 # ─────────────────────────────────────────────
 # Weight Profiles (per task)
 # ─────────────────────────────────────────────
-#
-# Task 1 (Easy — Single Spike):
-#   Primary test: react to a spike. Uptime + SLA are main signal.
-#
-# Task 2 (Medium — Wave Management):
-#   Primary test: scale up AND back down across waves.
-#   Cost and scaling efficiency both matter.
-#
-# Task 3 (Hard — Adaptive/Uncertainty):
-#   Primary test: survive at all under tight constraints.
-#   Completion gets the highest weight — finishing is the achievement.
 
 WEIGHT_PROFILES: Dict[int, Dict[str, float]] = {
     1: {
@@ -110,8 +95,8 @@ def _score_uptime(info: Dict[str, Any], task: Task) -> float:
 
 def _score_sla(info: Dict[str, Any], task: Task) -> float:
     steps = max(1, info.get("steps_completed", 1))
-    sla_violations = info.get("sla_violation_count", 0)
-    return _clamp(max(0.0, 1.0 - (sla_violations / steps)))
+    violations = info.get("sla_violation_count", 0)
+    return _clamp(max(0.0, 1.0 - (violations / steps)))
 
 
 def _score_cost(info: Dict[str, Any], task: Task) -> float:
@@ -158,31 +143,26 @@ def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
 
 
 # ─────────────────────────────────────────────
-# Main Grader
+# compute_score — PRIMARY interface for OpenEnv validator
 # ─────────────────────────────────────────────
 
-def grade_episode(
-    task_id: int,
-    info: Dict[str, Any],
-    task: Task | None = None,
-) -> Dict[str, Any]:
+def compute_score(info: Dict[str, Any], task: Task) -> float:
     """
-    Score a completed episode. Returns final_score strictly in (0.001, 0.999).
+    Compute a single score float in (0.001, 0.999) for one episode.
+
+    This is the function the OpenEnv validator calls directly.
+    It uses task.task_id to select per-task weight profiles.
 
     Args:
-        task_id : integer task ID (1, 2, or 3)
-        info    : the info dict returned by env.step() on done=True
-        task    : optional Task object (fetched from registry if None)
+        info : the info dict returned by env.step() on done=True
+        task : the Task object for this episode
 
-    Returns dict with final_score, breakdown, weighted, weights, crash_penalty,
-    termination, steps, budget_used, uptime_pct.
+    Returns:
+        float strictly in (0.001, 0.999)
     """
-    if task is None:
-        task = get_task(task_id)
-
+    task_id = task.task_id
     weights = WEIGHT_PROFILES[task_id]
 
-    # Raw sub-scores — each already clamped to (0.001, 0.999)
     breakdown = {
         "completion":         _score_completion(info, task),
         "uptime":             _score_uptime(info, task),
@@ -192,18 +172,53 @@ def grade_episode(
         "scaling_efficiency": _score_scaling_efficiency(info, task),
     }
 
-    # Weighted contributions
+    weighted_sum = sum(score * weights[dim] for dim, score in breakdown.items())
+    crash_penalty = 0.3 if info.get("termination_reason") != "success" else 0.0
+    raw = weighted_sum - crash_penalty
+
+    return _clamp(raw)
+
+
+# ─────────────────────────────────────────────
+# grade_episode — extended interface with full breakdown
+# ─────────────────────────────────────────────
+
+def grade_episode(
+    task_id: int,
+    info: Dict[str, Any],
+    task: Task | None = None,
+) -> Dict[str, Any]:
+    """
+    Score a completed episode with full per-dimension breakdown.
+
+    Returns a dict (not a float). Use compute_score() if you need a plain float.
+
+    Args:
+        task_id : integer task ID (1, 2, or 3)
+        info    : the info dict returned by env.step() on done=True
+        task    : optional Task object (fetched from registry if None)
+    """
+    if task is None:
+        task = get_task(task_id)
+
+    weights = WEIGHT_PROFILES[task_id]
+
+    breakdown = {
+        "completion":         _score_completion(info, task),
+        "uptime":             _score_uptime(info, task),
+        "sla":                _score_sla(info, task),
+        "cost":               _score_cost(info, task),
+        "stability":          _score_stability(info, task),
+        "scaling_efficiency": _score_scaling_efficiency(info, task),
+    }
+
     weighted = {
         dim: round(score * weights[dim], 6)
         for dim, score in breakdown.items()
     }
 
-    # Crash penalty — flat explicit deduction on non-success
     crash_penalty = 0.3 if info.get("termination_reason") != "success" else 0.0
-
     raw_total = sum(weighted.values()) - crash_penalty
-
-    # Final score MUST be strictly between 0 and 1
     final_score = _clamp(raw_total)
 
     return {
@@ -221,7 +236,7 @@ def grade_episode(
 
 
 # ─────────────────────────────────────────────
-# Leaderboard Roll-up
+# aggregate_scores — leaderboard roll-up
 # ─────────────────────────────────────────────
 
 def aggregate_scores(scores: Dict[int, float]) -> float:
@@ -229,7 +244,6 @@ def aggregate_scores(scores: Dict[int, float]) -> float:
     Aggregate per-task scores into one leaderboard number.
 
     Weights: Task 1 = 20%, Task 2 = 35%, Task 3 = 45%.
-    Missing tasks default to _SCORE_MIN (not 0.0 — validator constraint).
     """
     task_weights = {1: 0.20, 2: 0.35, 3: 0.45}
     total = sum(

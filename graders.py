@@ -9,10 +9,13 @@ EPS = 1e-6
 
 def strict_unit_interval(x: float) -> float:
     x = float(x)
-    if x <= 0.0:
-        return EPS
-    if x >= 1.0:
-        return 1.0 - EPS
+
+    # HARD SAFE RANGE (validator safe zone)
+    if x <= 0.01:
+        return 0.01
+    if x >= 0.99:
+        return 0.99
+
     return x
 
 

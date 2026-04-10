@@ -4,18 +4,16 @@ from typing import Any, Dict
 
 from tasks import Task, get_task
 
-EPS = 1e-6
+SCORE_MIN = 0.01
+SCORE_MAX = 0.99
 
 
 def strict_unit_interval(x: float) -> float:
     x = float(x)
-
-    # HARD SAFE RANGE (validator safe zone)
-    if x <= 0.01:
-        return 0.01
-    if x >= 0.99:
-        return 0.99
-
+    if x <= SCORE_MIN:
+        return SCORE_MIN
+    if x >= SCORE_MAX:
+        return SCORE_MAX
     return x
 
 
@@ -51,7 +49,7 @@ def _score_completion(info: Dict[str, Any], task: Task) -> float:
     steps_completed = max(1, int(info.get("steps_completed", 1)))
     fraction = min(steps_completed / task.max_steps, 1.0)
     if info.get("termination_reason") == "success":
-        return strict_unit_interval(1.0 - EPS)
+        return SCORE_MAX
     return strict_unit_interval(fraction ** 0.75)
 
 
@@ -59,7 +57,7 @@ def _score_uptime(info: Dict[str, Any], task: Task) -> float:
     uptime = max(0.0, min(100.0, float(info.get("uptime_percentage", 0.0))))
 
     if uptime >= 95.0:
-        score = 1.0 - EPS
+        score = SCORE_MAX
     elif uptime >= 90.0:
         score = 0.80 + (uptime - 90.0) / 10.0 * 0.20
     elif uptime >= 70.0:
@@ -83,10 +81,10 @@ def _score_cost(info: Dict[str, Any], task: Task) -> float:
     hard_limit = budget * task.budget_failure_multiplier
 
     if total_cost <= budget:
-        return strict_unit_interval(1.0 - EPS)
+        return SCORE_MAX
 
     if total_cost >= hard_limit:
-        return strict_unit_interval(EPS)
+        return SCORE_MIN
 
     overspend_fraction = (total_cost - budget) / (hard_limit - budget)
     score = 1.0 - overspend_fraction
@@ -99,7 +97,7 @@ def _score_stability(info: Dict[str, Any], task: Task) -> float:
     ratio = critical / steps
 
     if ratio == 0.0:
-        score = 1.0 - EPS
+        score = SCORE_MAX
     elif ratio <= 0.20:
         score = 1.0 - (ratio / 0.20) * 0.50
     elif ratio <= 0.50:
@@ -118,7 +116,7 @@ def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
     )
 
     if unnecessary == 0:
-        score = 1.0 - EPS
+        score = SCORE_MAX
     else:
         ratio = unnecessary / tolerance
         if ratio <= 1.0:
@@ -155,15 +153,7 @@ def grade_episode_details(
 
     crash_penalty = 0.3 if info.get("termination_reason") != "success" else 0.0
     raw_total = sum(weighted.values()) - crash_penalty
-
-    # HARD FIX: prevent near-zero values
-    if raw_total <= 0.01:
-        raw_total = 0.01
-
-    if raw_total >= 0.99:
-        raw_total = 0.99
-
-    final_score = round(raw_total, 6)
+    final_score = round(strict_unit_interval(raw_total), 6)
 
     return {
         "task_id": task_id,

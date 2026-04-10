@@ -33,21 +33,13 @@ from environment import (
 )
 from graders import grade_episode, aggregate_scores
 
-# 
-# Mandatory env vars (per hackathon spec)
-# 
-
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-API_KEY      = os.getenv("API_KEY")
-HF_TOKEN     = os.getenv("HF_TOKEN")  # optional fallback for local testing only
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+API_KEY = os.getenv("API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-BENCHMARK    = "autoscaling-openenv"
+BENCHMARK = "autoscaling-openenv"
 
-
-# 
-# Mandatory stdout logging - ONLY these 3 formats touch stdout
-# 
 
 def log_start(task_name: str, model: str) -> None:
     print(f"[START] task={task_name} env={BENCHMARK} model={model}", flush=True)
@@ -77,49 +69,34 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     )
 
 
-# 
-# Rule-Based Agent - mirrors baseline.py exactly
-# 
-
 class RuleBasedAgent:
     """
     Task-aware deterministic agent. Mirrors the logic in baseline.py.
-
-    Key design decisions:
-        - Task 2: double pre-scale at steps X7 and X8 so 4 instances are
-          active by wave start (3 instances at 350 rps = 97% CPU = instant crash)
-        - Task 3: never drop below 2 instances - single instance cannot
-          survive random spikes and the agent can't recover in time
-        - Task 1: proactive scale-up at 55% SLA CPU to account for boot delay
-        - Budget guard uses next-instance cost, not current-instance floor
     """
 
     def act(self, obs: Dict[str, Any]) -> int:
-        cpu         = obs["cpu_usage"]
-        queue       = obs["queue_length"]
-        inst        = obs["current_instances"]
-        pend        = obs["pending_instances"]
-        sla_cpu     = obs["sla_cpu_limit"]
-        sla_q       = obs["sla_queue_limit"]
-        max_inst    = obs["max_instances"]
-        rps         = obs["requests_per_second"]
+        cpu = obs["cpu_usage"]
+        queue = obs["queue_length"]
+        inst = obs["current_instances"]
+        pend = obs["pending_instances"]
+        sla_cpu = obs["sla_cpu_limit"]
+        sla_q = obs["sla_queue_limit"]
+        max_inst = obs["max_instances"]
+        rps = obs["requests_per_second"]
         budget_left = obs["budget_remaining"]
-        t           = obs["time_step"]
-        max_steps   = obs["max_steps"]
-        total       = inst + pend
-        steps_left  = max_steps - t
-        task_id     = obs["task_id"]
-        consec      = obs["consecutive_critical_steps"]
+        t = obs["time_step"]
+        max_steps = obs["max_steps"]
+        total = inst + pend
+        steps_left = max_steps - t
+        task_id = obs["task_id"]
+        consec = obs["consecutive_critical_steps"]
 
-        # Budget guard: block scale-up only if we can't afford one more
-        # instance for the rest of the episode (5% safety margin)
         next_inst_cost = (inst + 1) * 0.5 * steps_left
         budget_tight = budget_left < next_inst_cost * 1.05
 
-        #  Task 2: double pre-scale before each wave 
         if task_id == 2:
             in_low = rps < 150
-            t_mod  = t % 10
+            t_mod = t % 10
 
             if in_low and t_mod == 7 and total < 4 and budget_left > 12:
                 return ACTION_SCALE_UP
@@ -131,7 +108,6 @@ class RuleBasedAgent:
                 return ACTION_SCALE_DOWN
             return ACTION_HOLD
 
-        #  Task 3: never go below 2 instances 
         if task_id == 3:
             min_inst = 2
             if not budget_tight and total < max_inst:
@@ -141,7 +117,6 @@ class RuleBasedAgent:
                 return ACTION_SCALE_DOWN
             return ACTION_HOLD
 
-        #  Task 1: proactive spike response 
         if not budget_tight and total < max_inst:
             if cpu > sla_cpu * 0.55 or queue > sla_q * 0.25:
                 return ACTION_SCALE_UP
@@ -149,10 +124,6 @@ class RuleBasedAgent:
             return ACTION_SCALE_DOWN
         return ACTION_HOLD
 
-
-# 
-# LLM Agent (OpenAI-compatible client - mandatory per spec)
-# 
 
 SYSTEM_PROMPT = """You are an AI agent managing cloud server auto-scaling.
 
@@ -195,7 +166,7 @@ class LLMAgent:
                 model=MODEL_NAME,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user",   "content": prompt},
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.0,
                 max_tokens=50,
@@ -203,8 +174,8 @@ class LLMAgent:
             raw = (response.choices[0].message.content or "").strip()
             if raw.startswith("```"):
                 raw = "\n".join(
-                    l for l in raw.splitlines()
-                    if not l.startswith("```")
+                    line for line in raw.splitlines()
+                    if not line.startswith("```")
                 ).strip()
             parsed = json.loads(raw)
             action = int(parsed.get("action", ACTION_HOLD))
@@ -215,38 +186,34 @@ class LLMAgent:
             raise RuntimeError(f"LLM failed: {e}")
 
 
-# 
-# Task runner - emits ONLY mandatory stdout lines
-# 
-
 def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
-    env  = AutoScalingEnvironment()
-    obs  = env.reset(task_id=task_id)
+    env = AutoScalingEnvironment()
+    obs = env.reset(task_id=task_id)
     task = env.task
 
     log_start(task_name=task.name, model=agent_name)
 
-    rewards:    List[float]    = []
-    step_count: int            = 0
-    done:       bool           = False
+    rewards: List[float] = []
+    step_count = 0
+    done = False
     final_info: Dict[str, Any] = {}
-    error:      Optional[str]  = None
+    error: Optional[str] = None
 
     while not done:
         try:
             action = agent.act(obs)
         except Exception as exc:
             action = ACTION_HOLD
-            error  = str(exc)
+            error = str(exc)
 
         try:
             obs, reward, done, info = env.step(action)
             if done:
                 final_info = info
         except Exception as exc:
-            reward     = 0.0
-            done       = True
-            error      = str(exc)
+            reward = 0.0
+            done = True
+            error = str(exc)
             final_info = {}
 
         step_count += 1
@@ -262,17 +229,16 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
         error = None
 
     termination = final_info.get("termination_reason", "unknown")
-    success     = termination == "success"
+    success = termination == "success"
     log_end(success=success, steps=step_count, rewards=rewards)
 
-    result = grade_episode(task_id=task_id, info=final_info, task=task)
-    result["total_reward"] = round(sum(rewards), 4)
-    return result
+    final_score = grade_episode(task_id=task_id, info=final_info, task=task)
+    return {
+        "task_id": task_id,
+        "final_score": final_score,
+        "total_reward": round(sum(rewards), 4),
+    }
 
-
-# 
-# Main - no extra prints, only mandatory log lines go to stdout
-# 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -304,15 +270,15 @@ def main() -> None:
         agent = RuleBasedAgent()
         agent_name = "rule-based"
 
-    task_ids: List[int]        = [args.task] if args.task else [1, 2, 3]
-    scores:   Dict[int, float] = {}
+    task_ids: List[int] = [args.task] if args.task else [1, 2, 3]
+    scores: Dict[int, float] = {}
 
     for task_id in task_ids:
-        result          = run_task(task_id=task_id, agent=agent, agent_name=agent_name)
+        result = run_task(task_id=task_id, agent=agent, agent_name=agent_name)
         scores[task_id] = result["final_score"]
 
     if len(scores) == 3:
-        aggregate_scores(scores)   # compute for internal use; not printed (spec compliance)
+        aggregate_scores(scores)
 
 
 if __name__ == "__main__":

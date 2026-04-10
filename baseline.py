@@ -22,7 +22,7 @@ from environment import (
     ACTION_SCALE_DOWN,
     ACTION_HOLD,
 )
-from graders import grade_episode, aggregate_scores, print_grade
+from graders import grade_episode_details, aggregate_scores, print_grade
 
 
 class RuleBasedAgent:
@@ -45,87 +45,55 @@ class RuleBasedAgent:
     """
 
     def act(self, obs: dict) -> int:
-        cpu        = obs["cpu_usage"]
-        queue      = obs["queue_length"]
-        inst       = obs["current_instances"]
-        pend       = obs["pending_instances"]
-        sla_cpu    = obs["sla_cpu_limit"]
-        sla_q      = obs["sla_queue_limit"]
-        max_inst   = obs["max_instances"]
-        rps        = obs["requests_per_second"]
+        cpu = obs["cpu_usage"]
+        queue = obs["queue_length"]
+        inst = obs["current_instances"]
+        pend = obs["pending_instances"]
+        sla_cpu = obs["sla_cpu_limit"]
+        sla_q = obs["sla_queue_limit"]
+        max_inst = obs["max_instances"]
+        rps = obs["requests_per_second"]
         budget_left = obs["budget_remaining"]
-        t          = obs["time_step"]
-        max_steps  = obs["max_steps"]
-        total      = inst + pend
+        t = obs["time_step"]
+        max_steps = obs["max_steps"]
+        total = inst + pend
         steps_left = max_steps - t
-        task_id    = obs["task_id"]
-        consec     = obs["consecutive_critical_steps"]
+        task_id = obs["task_id"]
+        consec = obs["consecutive_critical_steps"]
 
-        #  Budget guard 
-        # Block scale-up only if we can't afford one more server
-        # for the remainder of the episode (with 5% safety margin).
         next_inst_cost = (inst + 1) * 0.5 * steps_left
         budget_tight = budget_left < next_inst_cost * 1.05
 
-        # 
-        # TASK 2 - Traffic Wave Management
-        # Waves alternate between 100 rps (low) and 350 rps (high).
-        # 3 instances at 350 rps = 97.2% CPU - above critical threshold.
-        # 4 instances at 350 rps = 72.9% CPU - safely below SLA.
-        # Strategy: pre-scale TWO servers at steps 7 and 8 of each cycle,
-        # so both are fully active (booted) by step 10 when the wave hits.
-        # Scale back to 2 during troughs to stay within budget.
-        # 
         if task_id == 2:
             in_low = rps < 150
-            t_mod  = t % 10
+            t_mod = t % 10
 
-            # Pre-scale server 1: fires at step X7 (3 steps before wave)
             if in_low and t_mod == 7 and total < 4 and budget_left > 12:
                 return ACTION_SCALE_UP
 
-            # Pre-scale server 2: fires at step X8 (2 steps before wave)
             if in_low and t_mod == 8 and total < 4 and budget_left > 10:
                 return ACTION_SCALE_UP
 
-            # Emergency: wave arrived and we're underpowered
             if rps >= 300 and cpu > 90 and total < max_inst and consec < 3:
                 return ACTION_SCALE_UP
 
-            # Scale down during trough - not near next wave boundary
             if in_low and inst > 2 and cpu < 35.0 and t_mod <= 4:
                 return ACTION_SCALE_DOWN
 
             return ACTION_HOLD
 
-        # 
-        # TASK 3 - Adaptive Scaling Under Uncertainty
-        # Random traffic 50-480 rps. Budget=40 is very tight.
-        # Critical insight: never drop to 1 instance.
-        # 1 instance handles only 100 rps. Any spike to 150+ rps
-        # sends CPU critical and the agent can't recover fast enough.
-        # 2 instances handles up to 200 rps safely - covers most steps.
-        # 
         if task_id == 3:
-            min_inst = 2  # absolute floor - never go below this
+            min_inst = 2
 
-            # Scale up if load is rising and budget allows
             if not budget_tight and total < max_inst:
                 if cpu > sla_cpu * 0.60 or queue > sla_q * 0.30:
                     return ACTION_SCALE_UP
 
-            # Scale down only when genuinely quiet AND above floor
             if inst > min_inst and cpu < 25.0 and queue < sla_q * 0.08:
                 return ACTION_SCALE_DOWN
 
             return ACTION_HOLD
 
-        # 
-        # TASK 1 - Single Spike Recovery
-        # Standard proactive scaling with boot delay awareness.
-        # Act at 55% of SLA CPU (not 85%) so the new server is active
-        # before CPU redlines.
-        # 
         if not budget_tight and total < max_inst:
             if cpu > sla_cpu * 0.55 or queue > sla_q * 0.25:
                 return ACTION_SCALE_UP
@@ -149,13 +117,13 @@ def main():
     )
     args = parser.parse_args()
 
-    agent    = RuleBasedAgent()
+    agent = RuleBasedAgent()
     task_ids = [args.task] if args.task else [1, 2, 3]
-    scores   = {}
+    scores = {}
 
     for task_id in task_ids:
-        env  = AutoScalingEnvironment()
-        obs  = env.reset(task_id=task_id)
+        env = AutoScalingEnvironment()
+        obs = env.reset(task_id=task_id)
         done = False
         final_info = {}
 
@@ -165,7 +133,7 @@ def main():
             if done:
                 final_info = info
 
-        result = grade_episode(task_id, final_info, env.task)
+        result = grade_episode_details(task_id, final_info, env.task)
         print_grade(result)
         scores[task_id] = result["final_score"]
 

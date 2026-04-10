@@ -152,7 +152,15 @@ def grade_episode_details(
 
     crash_penalty = 0.3 if info.get("termination_reason") != "success" else 0.0
     raw_total = sum(weighted.values()) - crash_penalty
-    final_score = round(strict_unit_interval(raw_total), 6)
+
+    # HARD FIX: prevent near-zero values
+    if raw_total <= 0.01:
+        raw_total = 0.01
+
+    if raw_total >= 0.99:
+        raw_total = 0.99
+
+    final_score = round(raw_total, 6)
 
     return {
         "task_id": task_id,

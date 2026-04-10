@@ -5,24 +5,25 @@ description: >
   An OpenEnv-compatible environment where an AI agent manages
   server infrastructure scaling decisions (scale up / scale down / hold)
   based on real-time CPU usage, request queue length, traffic load,
-  and cost constraints.
+  and cost constraints. Models real-world cloud auto-scaling with
+  server boot delays, budget limits, and SLA enforcement.
 
 authors:
   - name: Auto-Scaling Team
     track: Meta x Scaler OpenEnv AI Hackathon
 
-# ─────────────────────────────────────────────
+# 
 # Environment
-# ─────────────────────────────────────────────
+# 
 
 environment:
   class: AutoScalingEnvironment
   module: environment
   entrypoint: environment.py
 
-# ─────────────────────────────────────────────
+# 
 # Action Space
-# ─────────────────────────────────────────────
+# 
 
 action_space:
   type: discrete
@@ -32,48 +33,55 @@ action_space:
     1: scale_down
     2: hold
 
-# ─────────────────────────────────────────────
+# 
 # Observation Space
-# ─────────────────────────────────────────────
+# 
 
 observation_space:
   type: dict
   fields:
-    task_id:                    { type: int,   description: "Active task (1/2/3)" }
-    task_name:                  { type: str,   description: "Human-readable task name" }
-    difficulty:                 { type: str,   description: "easy | medium | hard" }
-    cpu_usage:                  { type: float, description: "CPU percent, can exceed 100 under overload" }
-    memory_usage:               { type: float, description: "Estimated memory percent (0-100)" }
-    queue_length:               { type: float, description: "Pending requests in queue" }
-    requests_per_second:        { type: float, description: "Current traffic load (rps)" }
-    current_instances:          { type: int,   description: "Active servers" }
-    pending_instances:          { type: int,   description: "Servers still booting" }
-    max_instances:              { type: int,   description: "Maximum allowed servers" }
-    cost_so_far:                { type: float, description: "Cumulative cost" }
-    budget:                     { type: float, description: "Total budget" }
-    budget_remaining:           { type: float, description: "budget - cost_so_far" }
-    time_step:                  { type: int,   description: "Current step index" }
-    max_steps:                  { type: int,   description: "Episode length" }
-    steps_remaining:            { type: int,   description: "Steps left" }
-    sla_cpu_limit:              { type: float, description: "CPU limit before SLA penalty" }
-    sla_queue_limit:            { type: int,   description: "Queue limit before SLA penalty" }
-    critical_cpu_threshold:     { type: float, description: "Critical CPU threshold" }
-    critical_queue_threshold:   { type: int,   description: "Critical queue threshold" }
-    consecutive_critical_steps: { type: int,   description: "Critical steps in a row" }
-    last_action:                { type: str,   description: "scale_up | scale_down | hold" }
+    task_id: { type: int }
+    task_name: { type: str }
+    difficulty: { type: str }
 
-# ─────────────────────────────────────────────
+    cpu_usage: { type: float }
+    memory_usage: { type: float }
+    queue_length: { type: float }
+    requests_per_second: { type: float }
+
+    current_instances: { type: int }
+    pending_instances: { type: int }
+    max_instances: { type: int }
+
+    cost_so_far: { type: float }
+    budget: { type: float }
+    budget_remaining: { type: float }
+
+    time_step: { type: int }
+    max_steps: { type: int }
+    steps_remaining: { type: int }
+
+    sla_cpu_limit: { type: float }
+    sla_queue_limit: { type: int }
+    critical_cpu_threshold: { type: float }
+    critical_queue_threshold: { type: int }
+
+    consecutive_critical_steps: { type: int }
+    last_action: { type: str }
+
+# 
 # Reward
-# ─────────────────────────────────────────────
+# 
 
 reward:
   type: shaped
+  range: [-1.0, 1.0]
   description: >
-    Reward balances system stability, SLA adherence, and cost efficiency.
+    Dense reward balancing SLA adherence, system stability, and cost efficiency.
 
-# ─────────────────────────────────────────────
+# 
 # Tasks
-# ─────────────────────────────────────────────
+# 
 
 tasks:
   - id: 1
@@ -82,7 +90,15 @@ tasks:
     max_steps: 30
     initial_instances: 2
     max_instances: 10
+    instance_capacity_rps: 150.0
     budget: 100.0
+    boot_delay_steps: 2
+    sla_cpu_limit: 85.0
+    critical_cpu_threshold: 95.0
+    description: >
+      Traffic jumps from 100 rps to 380 rps at step 5, holds until step 20,
+      then drops back.
+    baseline_score: 0.8134
 
   - id: 2
     name: Traffic Wave Management
@@ -90,7 +106,14 @@ tasks:
     max_steps: 50
     initial_instances: 2
     max_instances: 6
+    instance_capacity_rps: 120.0
     budget: 60.0
+    boot_delay_steps: 2
+    sla_cpu_limit: 82.0
+    critical_cpu_threshold: 92.0
+    description: >
+      Traffic alternates between 100 and 350 rps every 10 steps.
+    baseline_score: 0.4417
 
   - id: 3
     name: Adaptive Scaling Under Uncertainty
@@ -98,20 +121,29 @@ tasks:
     max_steps: 60
     initial_instances: 2
     max_instances: 5
+    instance_capacity_rps: 100.0
     budget: 40.0
+    boot_delay_steps: 2
+    sla_cpu_limit: 80.0
+    critical_cpu_threshold: 90.0
+    description: >
+      Seeded random traffic (seed=42) between 50 and 480 rps.
+      In the default seeded episode, realized traffic ranges from 50 to 223 rps.      
+      Agent must adapt dynamically under tight budget constraints.
+    baseline_score: 0.2778
 
-# ─────────────────────────────────────────────
+# 
 # Scoring
-# ─────────────────────────────────────────────
+# 
 
 scoring:
   module: graders
-  function: compute_score
+  function: grade_episode
   aggregate_function: aggregate_scores
 
-# ─────────────────────────────────────────────
+# 
 # Runtime
-# ─────────────────────────────────────────────
+# 
 
 runtime:
   language: python
@@ -121,10 +153,11 @@ runtime:
     - fastapi>=0.110.0
     - uvicorn>=0.29.0
 
-# ─────────────────────────────────────────────
+# 
 # Entry Points
-# ─────────────────────────────────────────────
+# 
 
 entry_points:
+  server: "uvicorn server.app:app --host 0.0.0.0 --port 7860"
   baseline: "python baseline.py"
   inference: "python inference.py"

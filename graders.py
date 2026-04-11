@@ -195,6 +195,15 @@ def grade_episode(
         return float(EPS)
 
 
+def grade_episode_score(
+    task_id: Any = None,
+    info: Any = None,
+    task: Task | None = None,
+) -> float:
+    """Validator-facing minimal scorer: always returns strict float in (0, 1)."""
+    return float(strict_unit_interval(grade_episode(task_id=task_id, info=info, task=task)))
+
+
 def grade_episode_report(
     task_id: Any = None,
     info: Any = None,

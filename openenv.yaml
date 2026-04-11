@@ -138,7 +138,7 @@ tasks:
 
 scoring:
   module: graders
-  function: grade_episode
+  function: grade_episode_score
   aggregate_function: aggregate_scores
 
 # 

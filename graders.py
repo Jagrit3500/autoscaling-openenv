@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from tasks import Task, get_task
 
-EPS = 1e-6
+EPS = 1e-4
 
 
 def strict_unit_interval(x: float) -> float:

@@ -9,6 +9,24 @@ from tasks import Task, get_task
 EPS = 1e-2
 
 
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        v = float(value)
+        if not math.isfinite(v):
+            return default
+        return v
+    except Exception:
+        return default
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        v = int(float(value))
+        return v
+    except Exception:
+        return default
+
+
 def strict_unit_interval(x: float) -> float:
     v = float(x)
     if not math.isfinite(v):
@@ -43,7 +61,10 @@ def _normalize_scoring_inputs(
     if info is None:
         info = {}
     if not isinstance(info, dict):
-        info = dict(info)
+        try:
+            info = dict(info)
+        except Exception:
+            info = {}
 
     normalized_task_id = task_id
     if normalized_task_id is None:
@@ -53,10 +74,16 @@ def _normalize_scoring_inputs(
     if normalized_task_id is None:
         normalized_task_id = 1
 
-    normalized_task_id = int(normalized_task_id)
+    normalized_task_id = _to_int(normalized_task_id, 1)
+    if normalized_task_id not in WEIGHT_PROFILES:
+        normalized_task_id = 1
 
-    if task is None:
-        task = get_task(normalized_task_id)
+    if not isinstance(task, Task):
+        try:
+            task = get_task(normalized_task_id)
+        except Exception:
+            task = get_task(1)
+            normalized_task_id = 1
 
     return normalized_task_id, info, task
 
@@ -90,7 +117,7 @@ WEIGHT_PROFILES: Dict[int, Dict[str, float]] = {
 
 
 def _score_completion(info: Dict[str, Any], task: Task) -> float:
-    steps_completed = max(1, info.get("steps_completed", 1))
+    steps_completed = max(1, _to_int(info.get("steps_completed", 1), 1))
     fraction = min(steps_completed / task.max_steps, 1.0)
     if info.get("termination_reason") == "success":
         return 1.0
@@ -98,7 +125,7 @@ def _score_completion(info: Dict[str, Any], task: Task) -> float:
 
 
 def _score_uptime(info: Dict[str, Any], task: Task) -> float:
-    uptime = max(0.0, min(100.0, info.get("uptime_percentage", 0.0)))
+    uptime = max(0.0, min(100.0, _to_float(info.get("uptime_percentage", 0.0), 0.0)))
     if uptime >= 95.0:
         return 1.0
     if uptime >= 90.0:
@@ -109,13 +136,13 @@ def _score_uptime(info: Dict[str, Any], task: Task) -> float:
 
 
 def _score_sla(info: Dict[str, Any], task: Task) -> float:
-    steps = max(1, info.get("steps_completed", 1))
-    sla_violations = info.get("sla_violation_count", 0)
+    steps = max(1, _to_int(info.get("steps_completed", 1), 1))
+    sla_violations = max(0, _to_int(info.get("sla_violation_count", 0), 0))
     return round(max(0.0, 1.0 - (sla_violations / steps)), 4)
 
 
 def _score_cost(info: Dict[str, Any], task: Task) -> float:
-    total_cost = info.get("total_cost", 0.0)
+    total_cost = _to_float(info.get("total_cost", 0.0), 0.0)
     budget = task.budget
     hard_limit = budget * task.budget_failure_multiplier
     if total_cost <= budget:
@@ -127,8 +154,8 @@ def _score_cost(info: Dict[str, Any], task: Task) -> float:
 
 
 def _score_stability(info: Dict[str, Any], task: Task) -> float:
-    steps = max(1, info.get("steps_completed", 1))
-    critical = info.get("critical_violation_count", 0)
+    steps = max(1, _to_int(info.get("steps_completed", 1), 1))
+    critical = max(0, _to_int(info.get("critical_violation_count", 0), 0))
     ratio = critical / steps
     if ratio == 0.0:
         return 1.0
@@ -142,8 +169,8 @@ def _score_stability(info: Dict[str, Any], task: Task) -> float:
 def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
     tolerance = max(1, task.max_steps // 5)
     unnecessary = (
-        info.get("unnecessary_scaleups", 0)
-        + info.get("unnecessary_scaledowns", 0)
+        max(0, _to_int(info.get("unnecessary_scaleups", 0), 0))
+        + max(0, _to_int(info.get("unnecessary_scaledowns", 0), 0))
     )
     if unnecessary == 0:
         return 1.0
@@ -158,10 +185,12 @@ def grade_episode(
     info: Any = None,
     task: Task | None = None,
 ) -> float:
-    tid, details_info, details_task = _normalize_scoring_inputs(task_id, info, task)
-    return float(
-        grade_episode_details(task_id=tid, info=details_info, task=details_task)["final_score"]
-    )
+    try:
+        tid, details_info, details_task = _normalize_scoring_inputs(task_id, info, task)
+        result = grade_episode_details(task_id=tid, info=details_info, task=details_task)
+        return strict_unit_interval(_to_float(result.get("final_score", EPS), EPS))
+    except Exception:
+        return EPS
 
 
 def grade_episode_details(
@@ -169,7 +198,10 @@ def grade_episode_details(
     info: Any = None,
     task: Task | None = None,
 ) -> Dict[str, Any]:
-    task_id, info, task = _normalize_scoring_inputs(task_id, info, task)
+    try:
+        task_id, info, task = _normalize_scoring_inputs(task_id, info, task)
+    except Exception:
+        task_id, info, task = 1, {}, get_task(1)
 
     weights = WEIGHT_PROFILES[task_id]
 
@@ -201,9 +233,9 @@ def grade_episode_details(
         "weights": weights,
         "crash_penalty": crash_penalty,
         "termination": info.get("termination_reason", "unknown"),
-        "steps": info.get("steps_completed", 0),
-        "budget_used": f"{info.get('total_cost', 0.0):.2f} / {task.budget:.2f}",
-        "uptime_pct": info.get("uptime_percentage", 0.0),
+        "steps": _to_int(info.get("steps_completed", 0), 0),
+        "budget_used": f"{_to_float(info.get('total_cost', 0.0), 0.0):.2f} / {task.budget:.2f}",
+        "uptime_pct": _to_float(info.get("uptime_percentage", 0.0), 0.0),
     }
 
 

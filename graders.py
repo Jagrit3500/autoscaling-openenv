@@ -221,20 +221,10 @@ def grade_episode(
         tid, details_info, details_task = _normalize_scoring_inputs(task_id, info, task)
         result = grade_episode_details(task_id=tid, info=details_info, task=details_task)
         score = strict_unit_interval(_to_float(result.get("final_score", EPS), EPS))
-        return ScoreResult(score, result)
+        # Expose only score fields for dict-style consumers.
+        return ScoreResult(score, {"score": score, "final_score": score})
     except Exception:
-        fallback = {
-            "task_id": 1,
-            "final_score": EPS,
-            "breakdown": {},
-            "weighted": {},
-            "weights": WEIGHT_PROFILES[1],
-            "crash_penalty": 0.0,
-            "termination": "error",
-            "steps": 0,
-            "budget_used": "0.00 / 100.00",
-            "uptime_pct": 0.0,
-        }
+        fallback = {"score": EPS, "final_score": EPS}
         return ScoreResult(EPS, fallback)
 
 

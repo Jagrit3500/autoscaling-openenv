@@ -111,6 +111,14 @@ def grade_episode(
     task_id: int,
     info: Dict[str, Any],
     task: Task | None = None,
+) -> float:
+    return float(grade_episode_details(task_id=task_id, info=info, task=task)["final_score"])
+
+
+def grade_episode_details(
+    task_id: int,
+    info: Dict[str, Any],
+    task: Task | None = None,
 ) -> Dict[str, Any]:
     if task is None:
         task = get_task(task_id)
@@ -155,14 +163,6 @@ def aggregate_scores(scores: Dict[int, float]) -> float:
     task_weights = {1: 0.20, 2: 0.35, 3: 0.45}
     total = sum(scores.get(tid, 0.0) * w for tid, w in task_weights.items())
     return strict_rounded_unit_interval(total)
-
-
-def grade_episode_details(
-    task_id: int,
-    info: Dict[str, Any],
-    task: Task | None = None,
-) -> Dict[str, Any]:
-    return grade_episode(task_id=task_id, info=info, task=task)
 
 
 def print_grade(result: Dict[str, Any]) -> None:

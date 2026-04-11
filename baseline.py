@@ -22,7 +22,7 @@ from environment import (
     ACTION_SCALE_DOWN,
     ACTION_HOLD,
 )
-from graders import grade_episode, aggregate_scores, print_grade
+from graders import grade_episode, grade_episode_details, aggregate_scores, print_grade
 
 
 class RuleBasedAgent:
@@ -165,7 +165,7 @@ def main():
             if done:
                 final_info = info
 
-        result = grade_episode(task_id, final_info, env.task)
+        result = grade_episode_details(task_id, final_info, env.task)
         print_grade(result)
         scores[task_id] = result["final_score"]
 

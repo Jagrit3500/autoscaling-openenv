@@ -5,7 +5,8 @@ from typing import Any, Dict
 
 from tasks import Task, get_task
 
-EPS = 1e-6
+# Keep scores safely inside (0, 1) even under coarse external rounding.
+EPS = 1e-2
 
 
 def strict_unit_interval(x: float) -> float:

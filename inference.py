@@ -265,12 +265,9 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
     success     = termination == "success"
     log_end(success=success, steps=step_count, rewards=rewards)
 
-    final_score = grade_episode(task_id=task_id, info=final_info, task=task)
-    return {
-        "task_id": task_id,
-        "final_score": final_score,
-        "total_reward": round(sum(rewards), 4),
-    }
+    result = grade_episode(task_id=task_id, info=final_info, task=task)
+    result["total_reward"] = round(sum(rewards), 4)
+    return result
 
 
 # 

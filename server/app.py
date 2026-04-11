@@ -21,7 +21,7 @@ from tasks import ALL_TASKS
 app = FastAPI(
     title="Auto-Scaling Infrastructure Agent - OpenEnv",
     description="OpenEnv environment for AI-driven server auto-scaling",
-    version="1.0.0",
+    version="1.0.1",
 )
 
 env = AutoScalingEnvironment()
@@ -113,7 +113,7 @@ def metadata():
     return {
         "name": "auto-scaling-infrastructure-agent",
         "description": "OpenEnv environment for AI-driven server auto-scaling",
-        "version": "1.0.0",
+        "version": "1.0.1",
     }
 
 

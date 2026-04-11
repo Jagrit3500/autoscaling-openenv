@@ -1,5 +1,5 @@
 name: auto-scaling-infrastructure-agent
-version: "1.0.0"
+version: "1.0.1"
 
 description: >
   An OpenEnv-compatible environment where an AI agent manages

@@ -188,14 +188,14 @@ def grade_episode(
 ) -> float:
     try:
         tid, details_info, details_task = _normalize_scoring_inputs(task_id, info, task)
-        result = grade_episode_details(task_id=tid, info=details_info, task=details_task)
+        result = grade_episode_report(task_id=tid, info=details_info, task=details_task)
         score = strict_unit_interval(_to_float(result.get("final_score", EPS), EPS))
         return float(score)
     except Exception:
         return float(EPS)
 
 
-def grade_episode_details(
+def grade_episode_report(
     task_id: Any = None,
     info: Any = None,
     task: Task | None = None,
@@ -238,6 +238,21 @@ def grade_episode_details(
         "steps": _to_int(info.get("steps_completed", 0), 0),
         "budget_used": f"{_to_float(info.get('total_cost', 0.0), 0.0):.2f} / {task.budget:.2f}",
         "uptime_pct": _to_float(info.get("uptime_percentage", 0.0), 0.0),
+    }
+
+
+def grade_episode_details(
+    task_id: Any = None,
+    info: Any = None,
+    task: Task | None = None,
+) -> Dict[str, Any]:
+    """Return only strict in-range score fields for validator compatibility."""
+    report = grade_episode_report(task_id=task_id, info=info, task=task)
+    return {
+        "final_score": report["final_score"],
+        "breakdown": report["breakdown"],
+        "weighted": report["weighted"],
+        "weights": report["weights"],
     }
 
 

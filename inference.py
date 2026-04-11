@@ -31,7 +31,7 @@ from environment import (
     ACTION_HOLD,
     ACTION_NAMES,
 )
-from graders import grade_episode, grade_episode_details, aggregate_scores
+from graders import grade_episode, grade_episode_report, aggregate_scores
 
 # 
 # Mandatory env vars (per hackathon spec)
@@ -265,7 +265,7 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
     success     = termination == "success"
     log_end(success=success, steps=step_count, rewards=rewards)
 
-    result = grade_episode_details(task_id=task_id, info=final_info, task=task)
+    result = grade_episode_report(task_id=task_id, info=final_info, task=task)
     result["total_reward"] = round(sum(rewards), 4)
     return result
 

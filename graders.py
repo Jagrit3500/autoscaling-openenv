@@ -27,6 +27,7 @@ def _to_int(value: Any, default: int = 0) -> int:
         return default
 
 
+# Keep the active score safely away from the boundaries.
 def strict_unit_interval(x: float) -> float:
     v = float(x)
     if not math.isfinite(v):

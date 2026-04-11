@@ -13,6 +13,7 @@ _HI = 0.999
 
 
 def strict_unit_interval(x: float) -> float:
+    """Clamp x to strictly open interval (0, 1) using _LO and _HI."""
     v = float(x)
     if v <= _LO:
         return _LO
@@ -54,7 +55,8 @@ def _score_completion(info: Dict[str, Any], task: Task) -> float:
     fraction = min(steps_completed / task.max_steps, 1.0)
     if info.get("termination_reason") == "success":
         return _HI
-    return round(max(_LO, fraction ** 0.75), 4)
+    score = max(_LO, fraction ** 0.75)
+    return strict_unit_interval(round(score, 6))
 
 
 def _score_uptime(info: Dict[str, Any], task: Task) -> float:
@@ -67,14 +69,14 @@ def _score_uptime(info: Dict[str, Any], task: Task) -> float:
         score = 0.40 + (uptime - 70.0) / 20.0 * 0.40
     else:
         score = uptime / 70.0 * 0.40
-    return round(max(_LO, score), 4)
+    return strict_unit_interval(round(max(_LO, score), 6))
 
 
 def _score_sla(info: Dict[str, Any], task: Task) -> float:
     steps = max(1, info.get("steps_completed", 1))
     sla_violations = info.get("sla_violation_count", 0)
     score = max(0.0, 1.0 - (sla_violations / steps))
-    return round(max(_LO, min(_HI, score)), 4)
+    return strict_unit_interval(round(max(_LO, min(_HI, score)), 6))
 
 
 def _score_cost(info: Dict[str, Any], task: Task) -> float:
@@ -86,7 +88,8 @@ def _score_cost(info: Dict[str, Any], task: Task) -> float:
     if total_cost >= hard_limit:
         return _LO
     overspend_fraction = (total_cost - budget) / (hard_limit - budget)
-    return round(max(_LO, 1.0 - overspend_fraction), 4)
+    score = max(_LO, 1.0 - overspend_fraction)
+    return strict_unit_interval(round(score, 6))
 
 
 def _score_stability(info: Dict[str, Any], task: Task) -> float:
@@ -101,7 +104,7 @@ def _score_stability(info: Dict[str, Any], task: Task) -> float:
         score = 0.50 - ((ratio - 0.20) / 0.30) * 0.40
     else:
         score = 0.10 - (ratio - 0.50) * 0.20
-    return round(max(_LO, score), 4)
+    return strict_unit_interval(round(max(_LO, score), 6))
 
 
 def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
@@ -117,7 +120,7 @@ def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
         score = 1.0 - ratio * 0.50
     else:
         score = 0.50 - (ratio - 1.0) * 0.50
-    return round(max(_LO, score), 4)
+    return strict_unit_interval(round(max(_LO, score), 6))
 
 
 def grade_episode(
@@ -150,8 +153,8 @@ def grade_episode(
     crash_penalty = 0.3 if info.get("termination_reason") != "success" else 0.0
     raw_total = sum(weighted.values()) - crash_penalty
 
-    # Final score strictly within (0, 1)
-    final_score = round(strict_unit_interval(raw_total), 6)
+    # Final score strictly within (0, 1) — enforced hard
+    final_score = strict_unit_interval(round(raw_total, 6))
 
     return {
         "task_id": task_id,
@@ -170,7 +173,7 @@ def grade_episode(
 def aggregate_scores(scores: Dict[int, float]) -> float:
     task_weights = {1: 0.20, 2: 0.35, 3: 0.45}
     total = sum(scores.get(tid, 0.0) * w for tid, w in task_weights.items())
-    return round(strict_unit_interval(total), 6)
+    return strict_unit_interval(round(total, 6))
 
 
 def print_grade(result: Dict[str, Any]) -> None:

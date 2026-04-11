@@ -1,18 +1,67 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Dict
 
 from tasks import Task, get_task
 
-EPS = 1e-4
+EPS = 1e-6
 
 
 def strict_unit_interval(x: float) -> float:
-    return max(EPS, min(1.0 - EPS, float(x)))
+    v = float(x)
+    if not math.isfinite(v):
+        return EPS
+    if v <= 0.0:
+        return EPS
+    if v >= 1.0:
+        return 1.0 - EPS
+    return v
 
 
 def strict_rounded_unit_interval(x: float, digits: int = 6) -> float:
     return strict_unit_interval(round(float(x), digits))
+
+
+def _normalize_scoring_inputs(
+    task_id: Any = None,
+    info: Any = None,
+    task: Any = None,
+) -> tuple[int, Dict[str, Any], Task]:
+    # Accept legacy and validator variants, e.g.:
+    # grade_episode(task_id, info, task)
+    # grade_episode(info, task)
+    # grade_episode(info)
+    # grade_episode(task_id=<...>, info=<...>, task=<...>)
+    if isinstance(task_id, dict):
+        if isinstance(info, Task) and task is None:
+            task = info
+        info = task_id
+        task_id = None
+
+    if isinstance(info, Task) and task is None:
+        task = info
+        info = None
+
+    if info is None:
+        info = {}
+    if not isinstance(info, dict):
+        info = dict(info)
+
+    normalized_task_id = task_id
+    if normalized_task_id is None:
+        normalized_task_id = info.get("task_id")
+    if normalized_task_id is None and isinstance(task, Task):
+        normalized_task_id = task.task_id
+    if normalized_task_id is None:
+        normalized_task_id = 1
+
+    normalized_task_id = int(normalized_task_id)
+
+    if task is None:
+        task = get_task(normalized_task_id)
+
+    return normalized_task_id, info, task
 
 
 WEIGHT_PROFILES: Dict[int, Dict[str, float]] = {
@@ -108,20 +157,22 @@ def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
 
 
 def grade_episode(
-    task_id: int,
-    info: Dict[str, Any],
+    task_id: Any = None,
+    info: Any = None,
     task: Task | None = None,
 ) -> float:
-    return float(grade_episode_details(task_id=task_id, info=info, task=task)["final_score"])
+    tid, details_info, details_task = _normalize_scoring_inputs(task_id, info, task)
+    return float(
+        grade_episode_details(task_id=tid, info=details_info, task=details_task)["final_score"]
+    )
 
 
 def grade_episode_details(
-    task_id: int,
-    info: Dict[str, Any],
+    task_id: Any = None,
+    info: Any = None,
     task: Task | None = None,
 ) -> Dict[str, Any]:
-    if task is None:
-        task = get_task(task_id)
+    task_id, info, task = _normalize_scoring_inputs(task_id, info, task)
 
     weights = WEIGHT_PROFILES[task_id]
 

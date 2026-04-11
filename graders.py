@@ -9,6 +9,37 @@ from tasks import Task, get_task
 EPS = 1e-2
 
 
+class ScoreResult(float):
+    """Float-like score that also exposes dict-style grading details.
+
+    This keeps compatibility with validators that treat the return value as
+    either a numeric score or a mapping containing `final_score`.
+    """
+
+    def __new__(cls, score: float, payload: Dict[str, Any]):
+        obj = super().__new__(cls, score)
+        obj._payload = payload
+        return obj
+
+    def __getitem__(self, key: str) -> Any:
+        return self._payload[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._payload.get(key, default)
+
+    def keys(self):
+        return self._payload.keys()
+
+    def items(self):
+        return self._payload.items()
+
+    def values(self):
+        return self._payload.values()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dict(self._payload)
+
+
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
         v = float(value)
@@ -185,13 +216,26 @@ def grade_episode(
     task_id: Any = None,
     info: Any = None,
     task: Task | None = None,
-) -> float:
+) -> ScoreResult:
     try:
         tid, details_info, details_task = _normalize_scoring_inputs(task_id, info, task)
         result = grade_episode_details(task_id=tid, info=details_info, task=details_task)
-        return strict_unit_interval(_to_float(result.get("final_score", EPS), EPS))
+        score = strict_unit_interval(_to_float(result.get("final_score", EPS), EPS))
+        return ScoreResult(score, result)
     except Exception:
-        return EPS
+        fallback = {
+            "task_id": 1,
+            "final_score": EPS,
+            "breakdown": {},
+            "weighted": {},
+            "weights": WEIGHT_PROFILES[1],
+            "crash_penalty": 0.0,
+            "termination": "error",
+            "steps": 0,
+            "budget_used": "0.00 / 100.00",
+            "uptime_pct": 0.0,
+        }
+        return ScoreResult(EPS, fallback)
 
 
 def grade_episode_details(

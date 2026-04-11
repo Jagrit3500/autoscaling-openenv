@@ -156,7 +156,13 @@ def grade_episode_details(
 
     crash_penalty = 0.3 if info.get("termination_reason") != "success" else 0.0
     raw_total = sum(weighted.values()) - crash_penalty
-    final_score = _clamp(raw_total)
+    # HARD SAFE CLAMP (FINAL FIX)
+    if raw_total <= 0.05:
+        final_score = 0.05
+    elif raw_total >= 0.95:
+        final_score = 0.95
+    else:
+        final_score = raw_total
 
     return {
         "task_id": task_id,
@@ -183,7 +189,11 @@ def grade_episode(
 def aggregate_scores(scores: Dict[int, float]) -> float:
     task_weights = {1: 0.20, 2: 0.35, 3: 0.45}
     total = sum(float(scores.get(tid, SCORE_MIN)) * w for tid, w in task_weights.items())
-    return _clamp(total)
+    if total <= 0.05:
+        return 0.05
+    elif total >= 0.95:
+        return 0.95
+    return total
 
 
 def print_grade(result: Dict[str, Any]) -> None:

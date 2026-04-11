@@ -13,11 +13,7 @@ def strict_unit_interval(x: float) -> float:
     v = float(x)
     if not math.isfinite(v):
         return EPS
-    if v <= 0.0:
-        return EPS
-    if v >= 1.0:
-        return 1.0 - EPS
-    return v
+    return max(EPS, min(1.0 - EPS, v))
 
 
 def strict_rounded_unit_interval(x: float, digits: int = 6) -> float:

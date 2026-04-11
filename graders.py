@@ -5,8 +5,8 @@ from typing import Any, Dict
 
 from tasks import Task, get_task
 
-# Keep scores safely inside (0, 1) even under coarse external rounding.
-EPS = 1e-2
+# Keep scores safely inside (0, 1) even under very coarse external rounding.
+EPS = 1e-1
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:

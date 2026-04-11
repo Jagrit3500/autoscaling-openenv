@@ -12,10 +12,18 @@ authors:
   - name: Auto-Scaling Team
     track: Meta x Scaler OpenEnv AI Hackathon
 
+# 
+# Environment
+# 
+
 environment:
   class: AutoScalingEnvironment
   module: environment
   entrypoint: environment.py
+
+# 
+# Action Space
+# 
 
 action_space:
   type: discrete
@@ -24,6 +32,10 @@ action_space:
     0: scale_up
     1: scale_down
     2: hold
+
+# 
+# Observation Space
+# 
 
 observation_space:
   type: dict
@@ -57,11 +69,19 @@ observation_space:
     consecutive_critical_steps: { type: int }
     last_action: { type: str }
 
+# 
+# Reward
+# 
+
 reward:
   type: shaped
   range: [-1.0, 1.0]
   description: >
     Dense reward balancing SLA adherence, system stability, and cost efficiency.
+
+# 
+# Tasks
+# 
 
 tasks:
   - id: 1
@@ -108,14 +128,22 @@ tasks:
     critical_cpu_threshold: 90.0
     description: >
       Seeded random traffic (seed=42) between 50 and 480 rps.
-      In the default seeded episode, realized traffic ranges from 50 to 223 rps.
+      In the default seeded episode, realized traffic ranges from 50 to 223 rps.      
       Agent must adapt dynamically under tight budget constraints.
     baseline_score: 0.2778
+
+# 
+# Scoring
+# 
 
 scoring:
   module: graders
   function: grade_episode
   aggregate_function: aggregate_scores
+
+# 
+# Runtime
+# 
 
 runtime:
   language: python
@@ -124,6 +152,10 @@ runtime:
     - openai>=1.30.0
     - fastapi>=0.110.0
     - uvicorn>=0.29.0
+
+# 
+# Entry Points
+# 
 
 entry_points:
   server: "uvicorn server.app:app --host 0.0.0.0 --port 7860"

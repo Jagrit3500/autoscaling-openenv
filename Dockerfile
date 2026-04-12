@@ -25,7 +25,7 @@ FROM python:3.10-slim
 
 LABEL maintainer="Auto-Scaling Team"
 LABEL description="OpenEnv Auto-Scaling Infrastructure Agent"
-LABEL version="1.0.0"
+LABEL version="1.0.1"
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1

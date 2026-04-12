@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 import json
+import uuid
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -135,6 +136,47 @@ def schema():
             "type": "object",
             "additionalProperties": True,
         },
+    }
+
+
+@app.post("/mcp")
+async def mcp(request: Request):
+    """Minimal MCP JSON-RPC endpoint.
+
+    OpenEnv's runtime validator expects POST /mcp to return a JSON-RPC payload
+    with {"jsonrpc": "2.0"}. This environment does not expose MCP tools, so we
+    return an empty tool list and safe errors for tool calls.
+    """
+
+    body = _safe_json_body(request)
+    req_id = body.get("id")
+    method = body.get("method")
+
+    # Validator may send an empty JSON object: {}
+    if not method:
+        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+
+    if method == "openenv/session/create":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"session_id": uuid.uuid4().hex},
+        }
+
+    if method == "tools/list":
+        return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": []}}
+
+    if method == "tools/call":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "error": {"code": -32601, "message": "No tools available"},
+        }
+
+    return {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "error": {"code": -32601, "message": f"Unknown method: {method}"},
     }
 
 

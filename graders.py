@@ -5,8 +5,16 @@ from typing import Any, Dict
 
 from tasks import Task, get_task
 
-# Keep scores safely inside (0, 1) even under very coarse external rounding.
+# Keep scores safely inside (0, 1) even under coarse external rounding.
+#
+# Note: Some validators round scores before checking strict inequalities.
+# We therefore clamp *after* rounding and also guard against edge cases
+# (NaN/inf or values landing exactly on 0.0/1.0).
 EPS = 1e-1
+
+# Smallest representable floats strictly inside (0, 1).
+STRICT_MIN = math.nextafter(0.0, 1.0)
+STRICT_MAX = math.nextafter(1.0, 0.0)
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -31,8 +39,19 @@ def _to_int(value: Any, default: int = 0) -> int:
 def strict_unit_interval(x: float) -> float:
     v = float(x)
     if not math.isfinite(v):
-        return EPS
-    return max(EPS, min(1.0 - EPS, v))
+        # Prefer EPS (keeps distance from boundaries under coarse rounding).
+        # If EPS is misconfigured (<=0 or >=1), fall back to STRICT_MIN.
+        return EPS if 0.0 < EPS < 1.0 else STRICT_MIN
+
+    # Primary clamp using EPS (keeps distance from boundaries).
+    v = max(EPS, min(1.0 - EPS, v))
+
+    # Final guard: ensure strict open interval even if EPS were mis-set.
+    if v <= 0.0:
+        return STRICT_MIN
+    if v >= 1.0:
+        return STRICT_MAX
+    return v
 
 
 def strict_rounded_unit_interval(x: float, digits: int = 6) -> float:
@@ -201,7 +220,8 @@ def grade_episode_score(
     task: Task | None = None,
 ) -> float:
     """Validator-facing minimal scorer: always returns strict float in (0, 1)."""
-    return float(strict_unit_interval(grade_episode(task_id=task_id, info=info, task=task)))
+    # Clamp AFTER rounding to be robust to validators that round first.
+    return float(strict_rounded_unit_interval(grade_episode(task_id=task_id, info=info, task=task)))
 
 
 def grade_episode_report(

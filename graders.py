@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 import math
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 # Ensure sibling modules (tasks.py, environment.py) are importable even when this
 # file is imported from a different working directory.
@@ -216,7 +216,7 @@ def _score_scaling_efficiency(info: Dict[str, Any], task: Task) -> float:
 def grade_episode(
     task_id: Any = None,
     info: Any = None,
-    task: Task | None = None,
+    task: Optional[Task] = None,
 ) -> float:
     try:
         tid, details_info, details_task = _normalize_scoring_inputs(task_id, info, task)
@@ -230,7 +230,7 @@ def grade_episode(
 def grade_episode_score(
     task_id: Any = None,
     info: Any = None,
-    task: Task | None = None,
+    task: Optional[Task] = None,
 ) -> float:
     """Validator-facing minimal scorer: always returns strict float in (0, 1)."""
     # Clamp AFTER rounding to be robust to validators that round first.
@@ -240,7 +240,7 @@ def grade_episode_score(
 def grade_episode_report(
     task_id: Any = None,
     info: Any = None,
-    task: Task | None = None,
+    task: Optional[Task] = None,
 ) -> Dict[str, Any]:
     try:
         task_id, info, task = _normalize_scoring_inputs(task_id, info, task)
@@ -286,7 +286,7 @@ def grade_episode_report(
 def grade_episode_details(
     task_id: Any = None,
     info: Any = None,
-    task: Task | None = None,
+    task: Optional[Task] = None,
 ) -> Dict[str, Any]:
     """Return only strict in-range score fields for validator compatibility."""
     report = grade_episode_report(task_id=task_id, info=info, task=task)

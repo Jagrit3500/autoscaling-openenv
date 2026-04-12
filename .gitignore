@@ -18,3 +18,13 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Build / packaging artifacts
+build/
+dist/
+*.egg-info/
+
+# Local packaging tests
+_pkg_test/
+_wheel_test/
+_wheel_test2/

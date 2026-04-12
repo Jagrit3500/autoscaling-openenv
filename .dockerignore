@@ -1,0 +1,27 @@
+# Exclude local build/test artifacts from Docker build context
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtualenvs
+venv/
+.venv/
+
+# Local build outputs
+build/
+dist/
+*.egg-info/
+
+# Local packaging tests
+_pkg_test/
+_wheel_test/
+_wheel_test2/
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

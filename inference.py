@@ -24,14 +24,24 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 
-from environment import (
-    AutoScalingEnvironment,
-    ACTION_SCALE_UP,
-    ACTION_SCALE_DOWN,
-    ACTION_HOLD,
-    ACTION_NAMES,
-)
-from graders import grade_episode, grade_episode_report, aggregate_scores
+try:
+    from environment import (
+        AutoScalingEnvironment,
+        ACTION_SCALE_UP,
+        ACTION_SCALE_DOWN,
+        ACTION_HOLD,
+        ACTION_NAMES,
+    )
+    from graders import grade_episode, grade_episode_report, aggregate_scores
+except ModuleNotFoundError:  # pragma: no cover
+    from .environment import (
+        AutoScalingEnvironment,
+        ACTION_SCALE_UP,
+        ACTION_SCALE_DOWN,
+        ACTION_HOLD,
+        ACTION_NAMES,
+    )
+    from .graders import grade_episode, grade_episode_report, aggregate_scores
 
 # 
 # Mandatory env vars (per hackathon spec)

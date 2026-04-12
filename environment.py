@@ -28,7 +28,10 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple
 
-from tasks import Task, get_task, empty_episode_info
+try:
+    from tasks import Task, get_task, empty_episode_info
+except ModuleNotFoundError:  # pragma: no cover
+    from .tasks import Task, get_task, empty_episode_info
 
 
 # 

@@ -16,13 +16,22 @@ Run a single task:
 
 import argparse
 
-from environment import (
-    AutoScalingEnvironment,
-    ACTION_SCALE_UP,
-    ACTION_SCALE_DOWN,
-    ACTION_HOLD,
-)
-from graders import grade_episode, grade_episode_report, aggregate_scores, print_grade
+try:
+    from environment import (
+        AutoScalingEnvironment,
+        ACTION_SCALE_UP,
+        ACTION_SCALE_DOWN,
+        ACTION_HOLD,
+    )
+    from graders import grade_episode, grade_episode_report, aggregate_scores, print_grade
+except ModuleNotFoundError:  # pragma: no cover
+    from .environment import (
+        AutoScalingEnvironment,
+        ACTION_SCALE_UP,
+        ACTION_SCALE_DOWN,
+        ACTION_HOLD,
+    )
+    from .graders import grade_episode, grade_episode_report, aggregate_scores, print_grade
 
 
 class RuleBasedAgent:

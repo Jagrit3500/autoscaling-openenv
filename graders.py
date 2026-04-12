@@ -3,7 +3,12 @@ from __future__ import annotations
 import math
 from typing import Any, Dict
 
-from tasks import Task, get_task
+try:
+    # When running from the environment directory (top-level modules).
+    from tasks import Task, get_task
+except ModuleNotFoundError:  # pragma: no cover
+    # When imported as a package (e.g. autoscaling_env.graders).
+    from .tasks import Task, get_task
 
 # Keep scores safely inside (0, 1) even under coarse external rounding.
 #

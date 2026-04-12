@@ -10,13 +10,22 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import uvicorn
 
-from environment import (
-    AutoScalingEnvironment,
-    ACTION_SCALE_UP,
-    ACTION_SCALE_DOWN,
-    ACTION_HOLD,
-)
-from tasks import ALL_TASKS
+try:
+    from environment import (
+        AutoScalingEnvironment,
+        ACTION_SCALE_UP,
+        ACTION_SCALE_DOWN,
+        ACTION_HOLD,
+    )
+    from tasks import ALL_TASKS
+except ModuleNotFoundError:  # pragma: no cover
+    from ..environment import (
+        AutoScalingEnvironment,
+        ACTION_SCALE_UP,
+        ACTION_SCALE_DOWN,
+        ACTION_HOLD,
+    )
+    from ..tasks import ALL_TASKS
 
 
 app = FastAPI(

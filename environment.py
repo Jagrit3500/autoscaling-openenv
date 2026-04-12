@@ -492,30 +492,32 @@ class AutoScalingEnvironment:
             "termination_reason": self.termination_reason,
         }
 
-        # Convenience: embed a strict in-range episode score at termination.
-        # Some external validators read the final score from the terminal info
-        # payload rather than importing the grader module.
-        if self.done:
+        # Convenience: embed a strict in-range score in info.
+        # Some external validators read the score from the step info payload
+        # rather than importing the grader module.
+        try:
             try:
-                try:
-                    from graders import grade_episode_score
-                except ModuleNotFoundError:  # pragma: no cover
-                    from .graders import grade_episode_score
+                from graders import grade_episode_score
+            except ModuleNotFoundError:  # pragma: no cover
+                from .graders import grade_episode_score
 
-                score = float(
-                    grade_episode_score(
-                        task_id=self.task.task_id,
-                        info=info,
-                        task=self.task,
-                    )
+            score = float(
+                grade_episode_score(
+                    task_id=self.task.task_id,
+                    info=info,
+                    task=self.task,
                 )
-            except Exception:
-                score = 0.1
+            )
+        except Exception:
+            score = 0.1
 
-            # Common aliases used by evaluators.
+        # Always present (safe strict (0,1)).
+        info["score"] = score
+
+        # Aliases commonly used by evaluators.
+        if self.done:
             info["final_score"] = score
             info["task_score"] = score
-            info["score"] = score
 
         return info
 

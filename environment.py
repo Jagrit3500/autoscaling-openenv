@@ -25,8 +25,16 @@ Actions:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple
+
+# Ensure sibling modules (tasks.py, graders.py) are importable even when this
+# file is imported from a different working directory.
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
 
 try:
     from tasks import Task, get_task, empty_episode_info

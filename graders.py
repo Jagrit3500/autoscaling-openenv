@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 import math
 from typing import Any, Dict
+
+# Ensure sibling modules (tasks.py, environment.py) are importable even when this
+# file is imported from a different working directory.
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
 
 try:
     # When running from the environment directory (top-level modules).

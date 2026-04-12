@@ -32,7 +32,7 @@ try:
         ACTION_HOLD,
         ACTION_NAMES,
     )
-    from graders import grade_episode, grade_episode_report, aggregate_scores
+    from graders import grade_episode, grade_episode_score, grade_episode_report, aggregate_scores
 except ModuleNotFoundError:  # pragma: no cover
     from .environment import (
         AutoScalingEnvironment,
@@ -41,7 +41,7 @@ except ModuleNotFoundError:  # pragma: no cover
         ACTION_HOLD,
         ACTION_NAMES,
     )
-    from .graders import grade_episode, grade_episode_report, aggregate_scores
+    from .graders import grade_episode, grade_episode_score, grade_episode_report, aggregate_scores
 
 # 
 # Mandatory env vars (per hackathon spec)
@@ -78,11 +78,11 @@ def log_step(
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, rewards: List[float], score: float) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
         f"[END] success={str(success).lower()} "
-        f"steps={steps} rewards={rewards_str}",
+        f"steps={steps} rewards={rewards_str} score={float(score):.6f}",
         flush=True,
     )
 
@@ -273,7 +273,11 @@ def run_task(task_id: int, agent, agent_name: str) -> Dict[str, Any]:
 
     termination = final_info.get("termination_reason", "unknown")
     success     = termination == "success"
-    log_end(success=success, steps=step_count, rewards=rewards)
+
+    # Platform validators may extract the task score from stdout.
+    # Ensure we print a strict in-range score in (0, 1).
+    task_score = grade_episode_score(task_id=task_id, info=final_info, task=task)
+    log_end(success=success, steps=step_count, rewards=rewards, score=task_score)
 
     result = grade_episode_report(task_id=task_id, info=final_info, task=task)
     result["total_reward"] = round(sum(rewards), 4)

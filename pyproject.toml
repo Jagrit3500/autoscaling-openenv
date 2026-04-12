@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "auto-scaling-infrastructure-agent"
 version = "1.0.1"
@@ -13,6 +17,18 @@ dependencies = [
 
 [project.scripts]
 server = "server.app:main"
+
+[tool.setuptools]
+py-modules = [
+  "baseline",
+  "client",
+  "environment",
+  "graders",
+  "inference",
+  "models",
+  "tasks",
+]
+packages = ["server"]
 
 [tool.openenv]
 config = "openenv.yaml"

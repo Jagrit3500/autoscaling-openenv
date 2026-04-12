@@ -1,6 +1,9 @@
 name: auto-scaling-infrastructure-agent
 version: "1.0.1"
 
+# OpenEnv runtime providers (e.g., sandbox runners) use this to start the API.
+app: server.app:app
+
 description: >
   An OpenEnv-compatible environment where an AI agent manages
   server infrastructure scaling decisions (scale up / scale down / hold)
